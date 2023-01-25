@@ -10,6 +10,8 @@ mod app;
 mod backends;
 mod cli;
 mod custom_event;
+#[cfg(feature = "debugger")]
+mod debug;
 mod dbus;
 mod gui;
 mod log;

@@ -2484,6 +2484,11 @@ pub trait TDisplayObject<'gc>:
         None
     }
 
+    #[cfg(feature = "debugger")]
+    fn as_debuggable(self) -> Option<crate::debug::debuggable::Debuggable<'gc>> {
+        None
+    }
+
     fn avm1_text_field_bindings_mut(
         &self,
         _mc: &Mutation<'gc>,

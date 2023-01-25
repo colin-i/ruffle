@@ -74,3 +74,6 @@ pub const NEWEST_PLAYER_VERSION: u8 = 51;
 
 /// The default Flash Player version that Ruffle will emulate.
 pub const DEFAULT_PLAYER_VERSION: u8 = 32;
+
+#[cfg(feature = "debugger")]
+pub mod debug;

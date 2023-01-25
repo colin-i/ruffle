@@ -7,6 +7,8 @@ use crate::avm1::scope::{Scope, ScopeClass};
 use crate::avm1::{ArrayBuilder, Object, Value, fscommand, globals, scope};
 use crate::backend::navigator::{NavigationMethod, Request};
 use crate::context::UpdateContext;
+#[cfg(feature = "debugger")]
+use crate::debug::avm1_debugger::Avm1Debugger;
 use crate::display_object::{
     DisplayObject, DisplayObjectContainer, MovieClip, TDisplayObject, TDisplayObjectContainer,
 };
@@ -136,6 +138,14 @@ impl<'a> ActivationIdentifier<'a> {
     pub fn depth(&self) -> u16 {
         self.depth
     }
+
+    pub fn name(&self) -> &str {
+        self.name
+    }
+
+    pub fn parent(&self) -> Option<&'a ActivationIdentifier<'a>> {
+        self.parent
+    }
 }
 
 /// Represents a single activation of a given AVM1 function or keyframe.
@@ -173,6 +183,10 @@ pub struct Activation<'a, 'gc: 'a> {
     /// The current target display object of this stack frame.
     /// This can be changed with `tellTarget` (via `ActionSetTarget` and `ActionSetTarget2`).
     target_clip: Option<DisplayObject<'gc>>,
+
+    #[cfg(feature = "debugger")]
+    /// The state of the debugger
+    debug_state: Avm1Debugger,
 
     pub context: &'a mut UpdateContext<'gc>,
 
@@ -252,6 +266,8 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             this,
             callee,
             local_registers,
+            #[cfg(feature = "debugger")]
+            debug_state: Avm1Debugger::new(),
         }
     }
 
@@ -274,6 +290,8 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             this: self.this,
             callee: self.callee,
             local_registers: self.local_registers,
+            #[cfg(feature = "debugger")]
+            debug_state: self.debug_state.clone(),
         }
     }
 
@@ -305,6 +323,8 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             callee: None,
             local_registers: &[],
             context,
+            #[cfg(feature = "debugger")]
+            debug_state: Avm1Debugger::new(),
         }
     }
 
@@ -439,6 +459,20 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             Ok(FrameControl::Return(ReturnType::Implicit))
         } else {
             let action = reader.read_action()?;
+
+            #[cfg(feature = "debugger")]
+            self.debug_state.preprocess_action(action.clone());
+
+            #[cfg(feature = "debugger")]
+            // Keep processing events while we are in a breakpoint
+            loop {
+                crate::debug::avm1_debugger::handle_avm1_debug_events(self);
+
+                if self.debug_state.pause_execution() {
+                    break;
+                }
+            }
+
             avm_debug!(
                 self.context.avm1,
                 "({}) Action: {action:?}",
@@ -762,6 +796,10 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         let num_args = self.context.avm1.pop().coerce_to_u32(self)? as usize;
         let args = self.pop_call_args(num_args);
 
+        #[cfg(feature = "debugger")]
+        self.debug_state
+            .preprocess_call(&mut self.context, fn_name.to_utf8_lossy().to_string());
+
         let variable = self.get_variable(fn_name)?;
 
         let result = variable.call_with_default_this(
@@ -796,6 +834,10 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         } else {
             method_name.coerce_to_string(self)?
         };
+
+        #[cfg(feature = "debugger")]
+        self.debug_state
+            .preprocess_call(&mut self.context, method_name.to_utf8_lossy().to_string());
 
         let result = if method_name.is_empty() {
             // Undefined/empty method name; call `this` as a function.
@@ -2960,6 +3002,17 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     /// Returns value of `this` as a reference.
     pub fn this_cell(&self) -> Value<'gc> {
         self.this
+    }
+
+    #[cfg(feature = "debugger")]
+    /// Returns the avm1 debugger state
+    pub fn debug_state_mut(&mut self) -> &mut Avm1Debugger {
+        &mut self.debug_state
+    }
+
+    /// Returns the local registers
+    pub fn local_registers(&self) -> Option<&'a [Cell<Value<'gc>>]> {
+        Some(self.local_registers)
     }
 
     pub fn constant_pool(&self) -> Gc<'gc, Vec<Value<'gc>>> {

@@ -45,6 +45,8 @@ fluent-templates = { workspace = true }
 toml_edit = { workspace = true, features = ["parse"] }
 gilrs = "0.11"
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "fs"] }
+tungstenite = { version = "0.18.0"}
+serde_json = { workspace = true, features = ["preserve_order"] }
 
 tracing-tracy = { version = "0.11.3", optional = true, features = ["demangle"] }
 rand = "0.9.1"
@@ -94,3 +96,5 @@ render_debug_labels = ["ruffle_render_wgpu/render_debug_labels"]
 
 # sandboxing
 sandbox = []
+
+debugger = ["ruffle_core/debugger"]

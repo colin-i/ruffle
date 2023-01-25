@@ -8,6 +8,8 @@ use crate::avm1::{Object as Avm1Object, Value as Avm1Value};
 use crate::avm2::Activation as Avm2Activation;
 use crate::avm2::api_version::ApiVersion;
 use crate::avm2::{Avm2, LoaderInfoObject, SharedObjectObject, SoundChannelObject};
+#[cfg(feature = "debugger")]
+use crate::backend::debug::DebuggerBackend;
 use crate::backend::{
     audio::{AudioBackend, AudioManager, SoundHandle, SoundInstanceHandle},
     log::LogBackend,
@@ -118,6 +120,10 @@ pub struct UpdateContext<'gc> {
 
     /// The RNG, used by the AVM `RandomNumber` opcode, `Math.random(),` and `random()`.
     pub rng: &'gc mut AvmRng,
+
+    #[cfg(feature = "debugger")]
+    /// The debugger backend
+    pub debugger: &'gc mut dyn DebuggerBackend,
 
     /// The current player's stage (including all loaded levels)
     pub stage: Stage<'gc>,
@@ -456,6 +462,10 @@ impl<'gc> UpdateContext<'gc> {
     }
 
     pub fn avm_trace(&self, message: &str) {
+        #[cfg(feature = "debugger")]
+        self.debugger.submit_debug_message(
+            crate::debug::debug_message_out::DebugMessageOut::LogTrace(message.to_string()),
+        );
         self.log.avm_trace(&message.replace('\r', "\n"));
     }
 

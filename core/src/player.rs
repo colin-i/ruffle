@@ -13,6 +13,8 @@ use crate::backend::navigator::FetchReason;
 use crate::backend::navigator::OwnedFuture;
 use crate::backend::navigator::SuccessResponse;
 use crate::backend::ui::FontDefinition;
+#[cfg(feature = "debugger")]
+use crate::backend::debug::DebuggerBackend;
 use crate::backend::{
     audio::{AudioBackend, AudioManager},
     log::LogBackend,
@@ -78,6 +80,9 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 use tracing::instrument;
 use web_time::Instant;
+
+#[cfg(feature = "debugger")]
+type Debugger = Box<dyn DebuggerBackend>;
 
 #[cfg(feature = "default_font")]
 pub const FALLBACK_DEVICE_FONT: &[u8] = include_bytes!("../assets/notosans.subset.ttf.gz");
@@ -316,6 +321,8 @@ pub struct Player {
     log: Box<dyn LogBackend>,
     ui: Box<dyn UiBackend>,
     video: Box<dyn VideoBackend>,
+    #[cfg(feature = "debugger")]
+    debugger: Debugger,
 
     transform_stack: TransformStack,
 
@@ -470,6 +477,12 @@ impl Player {
             );
             context.navigator.spawn_future(future);
         });
+
+        #[cfg(feature = "debugger")]
+        // Connect a debugger if one exists
+        if let Some(dbg_future) = self.debugger_mut().connect_debugger() {
+            self.navigator.spawn_future(dbg_future);
+        }
     }
 
     /// Get rough estimate of the max # of times we can update the frame.
@@ -523,6 +536,13 @@ impl Player {
         if !self.is_playing() {
             return;
         }
+
+        #[cfg(feature = "debugger")]
+        // Process player and targeted debug events
+        self.mutate_with_update_context(|context| {
+            crate::debug::handle_player_debug_events(context);
+            crate::debug::handle_targeted_debug_events(context);
+        });
 
         self.frame_accumulator += dt;
         let frame_duration = self.frame_duration();
@@ -2145,6 +2165,16 @@ impl Player {
         &mut *self.ui
     }
 
+    #[cfg(feature = "debugger")]
+    pub fn debugger(&self) -> &Debugger {
+        &self.debugger
+    }
+
+    #[cfg(feature = "debugger")]
+    pub fn debugger_mut(&mut self) -> &mut Debugger {
+        &mut self.debugger
+    }
+
     pub fn run_actions(context: &mut UpdateContext<'_>) {
         // Note that actions can queue further actions, so a while loop is necessary here.
         while let Some(action) = context.action_queue.pop_action() {
@@ -2288,6 +2318,8 @@ impl Player {
                 storage: this.storage.deref_mut(),
                 log: this.log.deref_mut(),
                 video: this.video.deref_mut(),
+                #[cfg(feature = "debugger")]
+                debugger: this.debugger.deref_mut(),
                 avm1_shared_objects,
                 avm2_shared_objects,
                 unbound_text_fields,
@@ -2577,6 +2609,8 @@ pub struct PlayerBuilder {
     storage: Option<Box<dyn StorageBackend>>,
     ui: Option<Box<dyn UiBackend>>,
     video: Option<Box<dyn VideoBackend>>,
+    #[cfg(feature = "debugger")]
+    debugger: Option<Debugger>,
 
     // Notifications
     notification_sender: Option<Sender<PlayerNotification>>,
@@ -2630,6 +2664,8 @@ impl PlayerBuilder {
             storage: None,
             ui: None,
             video: None,
+            #[cfg(feature = "debugger")]
+            debugger: None,
 
             notification_sender: None,
 
@@ -2834,6 +2870,13 @@ impl PlayerBuilder {
         self
     }
 
+    #[cfg(feature = "debugger")]
+    /// Sets the debugger
+    pub fn with_debugger(mut self, debugger: impl 'static + DebuggerBackend) -> Self {
+        self.debugger = Some(Box::new(debugger));
+        self
+    }
+
     /// Configures the player runtime (default is `PlayerRuntime::FlashPlayer`)
     pub fn with_player_runtime(mut self, runtime: PlayerRuntime) -> Self {
         self.player_runtime = runtime;
@@ -2984,6 +3027,10 @@ impl PlayerBuilder {
         let video = self
             .video
             .unwrap_or_else(|| Box::new(null::NullVideoBackend::new()));
+        #[cfg(feature = "debugger")]
+        let debugger = self
+            .debugger
+            .unwrap_or_else(|| Box::new(debug::NullDebuggerBackend::new()));
 
         let player_version = self.player_version.unwrap_or(DEFAULT_PLAYER_VERSION);
         let language = ui.language();
@@ -3002,6 +3049,8 @@ impl PlayerBuilder {
                 storage,
                 ui,
                 video,
+                #[cfg(feature = "debugger")]
+                debugger,
 
                 // SWF info
                 swf: fake_movie.clone(),
