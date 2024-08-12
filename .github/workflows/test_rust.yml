@@ -81,7 +81,7 @@ jobs:
 
       - name: Run tests with image tests
         if: runner.os != 'macOS'
-        run: cargo nextest run --profile ci --cargo-profile ci --workspace --offline --no-fail-fast -j 4 --features imgtests,lzma,jpegxr
+        run: cargo nextest run --profile ci --cargo-profile ci --workspace --no-fail-fast -j 4 --features imgtests,lzma,jpegxr
         env:
           # This is to counteract the disabling by rust-cache.
           # See: https://github.com/Swatinem/rust-cache/issues/43
