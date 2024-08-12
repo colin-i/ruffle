@@ -96,7 +96,7 @@ jobs:
 
       - name: Run tests without image tests
         if: runner.os == 'macOS'
-        run: cargo nextest run --profile ci --cargo-profile ci --workspace --locked --no-fail-fast -j 4 --features lzma,jpegxr
+        run: cargo nextest run --profile ci --cargo-profile ci --workspace --no-fail-fast -j 4 --features lzma,jpegxr
         env:
           XDG_RUNTIME_DIR: '' # dummy value, just to silence warnings about it missing
 

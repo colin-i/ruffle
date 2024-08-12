@@ -47,7 +47,7 @@ function cargoBuild({
     features?: string[];
     rustFlags?: string[];
 }) {
-    let args = ["build", "--locked", "--target", "wasm32-unknown-unknown"];
+    let args = ["build", "--target", "wasm32-unknown-unknown"];
     if (profile) {
         args.push("--profile", profile);
     }
