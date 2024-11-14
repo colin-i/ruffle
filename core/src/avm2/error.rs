@@ -22,7 +22,7 @@ pub enum Error<'gc> {
     RustError(Box<dyn std::error::Error>),
 }
 
-impl<'gc> Debug for Error<'gc> {
+impl Debug for Error<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Error::AvmError(error) = self {
             if let Some(error) = error.as_object().and_then(|obj| obj.as_error_object()) {
@@ -91,7 +91,7 @@ pub fn make_reference_error<'gc>(
     multiname: &Multiname<'gc>,
     object_class: Class<'gc>,
 ) -> Error<'gc> {
-    let qualified_name = multiname.as_uri(activation.context.gc_context);
+    let qualified_name = multiname.as_uri(activation.strings());
     let class_name = object_class
         .name()
         .to_qualified_name_err_message(activation.context.gc_context);
@@ -283,7 +283,7 @@ pub fn make_error_1065<'gc>(
     activation: &mut Activation<'_, 'gc>,
     name: &Multiname<'gc>,
 ) -> Error<'gc> {
-    let qualified_name = name.as_uri(activation.context.gc_context);
+    let qualified_name = name.as_uri(activation.strings());
 
     let err = reference_error(
         activation,
@@ -836,7 +836,7 @@ fn error_constructor<'gc>(
         .into())
 }
 
-impl<'gc> std::fmt::Display for Error<'gc> {
+impl std::fmt::Display for Error<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:?}")
     }

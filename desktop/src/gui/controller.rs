@@ -19,7 +19,7 @@ use url::Url;
 use wgpu::SurfaceError;
 use winit::dpi::PhysicalSize;
 use winit::event::WindowEvent;
-use winit::event_loop::EventLoop;
+use winit::event_loop::EventLoopProxy;
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Theme, Window};
 
@@ -46,9 +46,9 @@ pub struct GuiController {
 }
 
 impl GuiController {
-    pub async fn new(
+    pub fn new(
         window: Arc<Window>,
-        event_loop: &EventLoop<RuffleEvent>,
+        event_loop: EventLoopProxy<RuffleEvent>,
         preferences: GlobalPreferences,
         font_database: &Database,
         initial_movie_url: Option<Url>,
@@ -93,12 +93,14 @@ impl GuiController {
                 view_formats: Default::default(),
             },
         );
-        let event_loop = event_loop.create_proxy();
         let descriptors = Descriptors::new(instance, adapter, device, queue);
         let egui_ctx = Context::default();
 
-        let theme_controller =
-            ThemeController::new(window.clone(), preferences.clone(), egui_ctx.clone()).await;
+        let theme_controller = futures::executor::block_on(ThemeController::new(
+            window.clone(),
+            preferences.clone(),
+            egui_ctx.clone(),
+        ));
         let mut egui_winit = egui_winit::State::new(
             egui_ctx,
             ViewportId::ROOT,
@@ -161,6 +163,10 @@ impl GuiController {
         self.gui.dialogs.file_picker()
     }
 
+    pub fn window(&self) -> &Arc<Window> {
+        &self.window
+    }
+
     pub fn resize(&mut self, size: PhysicalSize<u32>) {
         if size.width > 0 && size.height > 0 {
             self.size = size;
@@ -221,12 +227,18 @@ impl GuiController {
         response.consumed
     }
 
+    pub fn close_movie(&mut self, player: &mut PlayerController) {
+        player.destroy();
+        self.gui.on_player_destroyed();
+    }
+
     pub fn create_movie(
         &mut self,
         player: &mut PlayerController,
         opt: LaunchOptions,
         movie_url: Url,
     ) {
+        self.close_movie(player);
         let movie_view = MovieView::new(
             self.movie_view_renderer.clone(),
             &self.descriptors.device,

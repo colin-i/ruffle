@@ -146,6 +146,7 @@ async function enableSWFTakeover() {
                 addRules: rules,
             });
         }
+        utils.storage.sync.set({ responseHeadersUnsupported: false });
     } else {
         utils.storage.sync.set({ responseHeadersUnsupported: true });
     }
@@ -156,6 +157,7 @@ async function disableSWFTakeover() {
         await utils.declarativeNetRequest.updateDynamicRules({
             removeRuleIds: [1, 2, 3],
         });
+        utils.storage.sync.set({ responseHeadersUnsupported: false });
     } else {
         utils.storage.sync.set({ responseHeadersUnsupported: true });
     }
@@ -180,13 +182,15 @@ async function enable() {
                 persistAcrossSessions: true,
                 matches: ["<all_urls>"],
                 excludeMatches: [
-                    "https://sso.godaddy.com/*",
-                    "https://authentication.td.com/*",
-                    "https://*.twitch.tv/*",
-                    "https://www.tuxedocomputers.com/*",
-                    "https://*.taobao.com/*",
-                    "https://*.time4learning.com/*",
-                    "https://*.edgenuity.com/*",
+                    "https://sso.godaddy.com/*", // See https://github.com/ruffle-rs/ruffle/pull/7146
+                    "https://authentication.td.com/*", // See https://github.com/ruffle-rs/ruffle/issues/2158
+                    "https://*.twitch.tv/*", // See https://github.com/ruffle-rs/ruffle/pull/8150
+                    "https://www.tuxedocomputers.com/*", // See https://github.com/ruffle-rs/ruffle/issues/11906
+                    "https://*.taobao.com/*", // See https://github.com/ruffle-rs/ruffle/pull/12650
+                    "https://*.time4learning.com/*", // See https://github.com/ruffle-rs/ruffle/pull/16186
+                    "https://*.edgenuity.com/*", // See https://github.com/ruffle-rs/ruffle/pull/16186
+                    "https://www.chewy.com/*", // See https://github.com/ruffle-rs/ruffle/issues/18265
+                    "https://*.duosecurity.com/*", // See https://github.com/ruffle-rs/ruffle/pull/18299
                 ],
                 runAt: "document_start",
                 allFrames: true,

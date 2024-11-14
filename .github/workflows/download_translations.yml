@@ -3,10 +3,11 @@ name: Download translations from Crowdin
 on:
   schedule:
     - cron: '0 21 * * *'
+  workflow_dispatch:
 
 jobs:
   crowdin:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     if: github.repository == 'ruffle-rs/ruffle'
 
@@ -50,6 +51,11 @@ jobs:
         working-directory: desktop/packages/linux
         run: |
           make apply
+
+      - name: Upload intermediate files
+        uses: actions/upload-artifact@v4
+        with:
+          path: desktop/packages/linux/locale
 
       - name: Commit
         run: |

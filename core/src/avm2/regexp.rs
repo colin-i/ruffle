@@ -28,7 +28,7 @@ pub struct RegExp<'gc> {
     cached_text: Option<CachedText<'gc>>,
 }
 
-impl<'gc> Clone for RegExp<'gc> {
+impl Clone for RegExp<'_> {
     fn clone(&self) -> Self {
         Self {
             source: self.source,
@@ -228,7 +228,7 @@ impl<'gc> RegExp<'gc> {
                     Some(r) => {
                         AvmString::new(activation.context.gc_context, &txt[r.start..r.end]).into()
                     }
-                    None => "".into(),
+                    None => activation.strings().empty().into(),
                 })
                 .chain(std::iter::once(m.range.start.into()))
                 .chain(std::iter::once((*txt).into()))

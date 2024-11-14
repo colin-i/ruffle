@@ -1,14 +1,13 @@
-import type { DataLoadOptions, URLLoadOptions } from "../../load-options";
-import type { MovieMetadata } from "../../movie-metadata";
+import type { DataLoadOptions, URLLoadOptions } from "../../public/config";
+import type { MovieMetadata, PlayerElement } from "../../public/player";
 import { InnerPlayer, ReadyState } from "./inner";
-import { Player } from "../../public/player";
 
 /**
  * The ruffle player element that should be inserted onto the page.
  *
  * This element will represent the rendered and intractable flash movie.
  */
-export class RufflePlayerElement extends HTMLElement implements Player {
+export class RufflePlayerElement extends HTMLElement implements PlayerElement {
     #inner: InnerPlayer;
 
     get onFSCommand(): ((command: string, args: string) => boolean) | null {

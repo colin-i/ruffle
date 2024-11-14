@@ -14,7 +14,7 @@ use crate::backend::{
     log::LogBackend,
     navigator::{NavigatorBackend, Request},
     storage::StorageBackend,
-    ui::{InputManager, MouseCursor, UiBackend},
+    ui::{MouseCursor, UiBackend},
 };
 use crate::compatibility_rules::CompatibilityRules;
 use crate::config::Letterbox;
@@ -33,6 +33,7 @@ use crate::external::{ExternalInterface, ExternalInterfaceProvider, NullFsComman
 use crate::external::{FsCommandProvider, Value as ExternalValue};
 use crate::focus_tracker::NavigationDirection;
 use crate::frame_lifecycle::{run_all_phases_avm2, FramePhase};
+use crate::input::InputManager;
 use crate::library::Library;
 use crate::limits::ExecutionLimit;
 use crate::loader::{LoadBehavior, LoadManager};
@@ -374,9 +375,6 @@ pub struct Player {
     /// Any compatibility rules to apply for this movie.
     compatibility_rules: CompatibilityRules,
 
-    /// A map from gamepad buttons to key codes.
-    gamepad_button_mapping: HashMap<GamepadButton, KeyCode>,
-
     /// Debug UI windows
     #[cfg(feature = "egui")]
     debug_ui: Rc<RefCell<crate::debug_ui::DebugUi>>,
@@ -477,7 +475,7 @@ impl Player {
         if self.recent_run_frame_timings.is_empty() {
             5
         } else {
-            let frame_time = 1000.0 / self.frame_rate;
+            let frame_time = self.frame_time(1000.0);
             let average_run_frame_time = self.recent_run_frame_timings.iter().sum::<f64>()
                 / self.recent_run_frame_timings.len() as f64;
             ((frame_time / average_run_frame_time) as u32).clamp(1, MAX_FRAMES_PER_TICK)
@@ -491,11 +489,19 @@ impl Player {
         }
     }
 
+    fn frame_time(&self, time_unit: f64) -> f64 {
+        let frame_rate = self.frame_rate;
+        if frame_rate == 0.0 || frame_rate.is_nan() {
+            0.0
+        } else {
+            time_unit / frame_rate
+        }
+    }
+
     pub fn tick(&mut self, dt: f64) {
         if self.is_playing() {
             self.frame_accumulator += dt;
-            let frame_rate = self.frame_rate;
-            let frame_time = 1000.0 / frame_rate;
+            let frame_time = self.frame_time(1000.0);
 
             let max_frames_per_tick = self.max_frames_per_tick();
             let mut frame = 0;
@@ -558,7 +564,7 @@ impl Player {
     /// Returns the approximate duration of time until the next frame is due to run.
     /// This is only an approximation to be used for sleep durations.
     pub fn time_til_next_frame(&self) -> std::time::Duration {
-        let frame_time = 1000.0 / self.frame_rate;
+        let frame_time = self.frame_time(1000.0);
         let mut dt = if self.frame_accumulator <= 0.0 {
             frame_time
         } else if self.frame_accumulator >= frame_time {
@@ -1007,31 +1013,8 @@ impl Player {
     ///    second wave of event processing.
     fn handle_input_event(&mut self, event: PlayerEvent) -> bool {
         let mut player_event_handled = false;
-        // Optionally transform gamepad button events into key events.
-        let event = match event {
-            PlayerEvent::GamepadButtonDown { button } => {
-                if let Some(key_code) = self.gamepad_button_mapping.get(&button) {
-                    PlayerEvent::KeyDown {
-                        key_code: *key_code,
-                        key_char: None,
-                    }
-                } else {
-                    // Just ignore this event.
-                    return false;
-                }
-            }
-            PlayerEvent::GamepadButtonUp { button } => {
-                if let Some(key_code) = self.gamepad_button_mapping.get(&button) {
-                    PlayerEvent::KeyUp {
-                        key_code: *key_code,
-                        key_char: None,
-                    }
-                } else {
-                    // Just ignore this event.
-                    return false;
-                }
-            }
-            _ => event,
+        let Some(event) = self.input.map_input_event(event) else {
+            return false;
         };
 
         let prev_mouse_buttons = self.input.get_mouse_down_buttons();
@@ -1116,26 +1099,8 @@ impl Player {
         }
 
         self.mutate_with_update_context(|context| {
-            let button_event = match event {
-                // ASCII characters convert directly to keyPress button events.
-                PlayerEvent::TextInput { codepoint }
-                    if codepoint as u32 >= 32 && codepoint as u32 <= 126 =>
-                {
-                    Some(ClipEvent::KeyPress {
-                        key_code: ButtonKeyCode::from_u8(codepoint as u8).unwrap(),
-                    })
-                }
-
-                // Special keys have custom values for keyPress.
-                PlayerEvent::KeyDown { key_code, .. } => {
-                    if let Some(key_code) = crate::events::key_code_to_button_key_code(key_code) {
-                        Some(ClipEvent::KeyPress { key_code })
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            };
+            let button_event = ButtonKeyCode::from_player_event(event)
+                .map(|key_code| ClipEvent::KeyPress { key_code });
 
             if let PlayerEvent::KeyDown { key_code, key_char }
             | PlayerEvent::KeyUp { key_code, key_char } = event
@@ -1929,7 +1894,8 @@ impl Player {
 
     #[instrument(level = "debug", skip_all)]
     pub fn run_frame(&mut self) {
-        let frame_time = Duration::from_nanos((750_000_000.0 / self.frame_rate) as u64);
+        let frame_time = self.frame_time(750_000_000.0);
+        let frame_time = Duration::from_nanos(frame_time as u64);
         let (mut execution_limit, may_execute_while_streaming) = match self.load_behavior {
             LoadBehavior::Streaming => (
                 ExecutionLimit::with_max_ops_and_time(10000, frame_time),
@@ -2380,9 +2346,12 @@ impl Player {
         self.mutate_with_update_context(|context| context.avm1.has_mouse_listener())
     }
 
-    pub fn add_external_interface(&mut self, provider: Box<dyn ExternalInterfaceProvider>) {
+    pub fn set_external_interface_provider(
+        &mut self,
+        provider: Option<Box<dyn ExternalInterfaceProvider>>,
+    ) {
         self.mutate_with_update_context(|context| {
-            context.external_interface.add_provider(provider)
+            context.external_interface.set_provider(provider)
         });
     }
 
@@ -2479,7 +2448,7 @@ pub struct PlayerBuilder {
     quality: StageQuality,
     page_url: Option<String>,
     frame_rate: Option<f64>,
-    external_interface_providers: Vec<Box<dyn ExternalInterfaceProvider>>,
+    external_interface_provider: Option<Box<dyn ExternalInterfaceProvider>>,
     fs_command_provider: Box<dyn FsCommandProvider>,
     #[cfg(feature = "known_stubs")]
     stub_report_output: Option<std::path::PathBuf>,
@@ -2530,7 +2499,7 @@ impl PlayerBuilder {
             quality: StageQuality::High,
             page_url: None,
             frame_rate: None,
-            external_interface_providers: vec![],
+            external_interface_provider: None,
             fs_command_provider: Box::new(NullFsCommandProvider),
             #[cfg(feature = "known_stubs")]
             stub_report_output: None,
@@ -2715,7 +2684,7 @@ impl PlayerBuilder {
 
     /// Adds an External Interface provider for movies to communicate with
     pub fn with_external_interface(mut self, provider: Box<dyn ExternalInterfaceProvider>) -> Self {
-        self.external_interface_providers.push(provider);
+        self.external_interface_provider = Some(provider);
         self
     }
 
@@ -2749,7 +2718,7 @@ impl PlayerBuilder {
         player_runtime: PlayerRuntime,
         fullscreen: bool,
         fake_movie: Arc<SwfMovie>,
-        external_interface_providers: Vec<Box<dyn ExternalInterfaceProvider>>,
+        external_interface_provider: Option<Box<dyn ExternalInterfaceProvider>>,
         fs_command_provider: Box<dyn FsCommandProvider>,
     ) -> GcRoot<'gc> {
         let mut interner = AvmStringInterner::new(gc_context);
@@ -2773,7 +2742,7 @@ impl PlayerBuilder {
             current_context_menu: None,
             drag_object: None,
             external_interface: ExternalInterface::new(
-                external_interface_providers,
+                external_interface_provider,
                 fs_command_provider,
             ),
             library: Library::empty(),
@@ -2867,7 +2836,7 @@ impl PlayerBuilder {
                 actions_since_timeout_check: 0,
 
                 // Input
-                input: Default::default(),
+                input: InputManager::new(self.gamepad_button_mapping),
                 mouse_in_stage: true,
                 mouse_position: Point::ZERO,
                 mouse_cursor: MouseCursor::Arrow,
@@ -2887,7 +2856,6 @@ impl PlayerBuilder {
                 load_behavior: self.load_behavior,
                 spoofed_url: self.spoofed_url.clone(),
                 compatibility_rules: self.compatibility_rules.clone(),
-                gamepad_button_mapping: self.gamepad_button_mapping,
                 stub_tracker: StubCollection::new(),
                 #[cfg(feature = "egui")]
                 debug_ui: Default::default(),
@@ -2900,7 +2868,7 @@ impl PlayerBuilder {
                         self.player_runtime,
                         self.fullscreen,
                         fake_movie.clone(),
-                        self.external_interface_providers,
+                        self.external_interface_provider,
                         self.fs_command_provider,
                     )
                 }))),
@@ -2932,6 +2900,12 @@ impl PlayerBuilder {
         }
 
         player_lock.mutate_with_update_context(|context| {
+            if !self.avm2_optimizer_enabled {
+                tracing::warn!(
+                    "AVM2 optimizer disabled, some bytecode verification will be missing"
+                );
+            }
+
             context
                 .avm2
                 .set_optimizer_enabled(self.avm2_optimizer_enabled);

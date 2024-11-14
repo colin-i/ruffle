@@ -1,16 +1,11 @@
 import React, { ReactNode, DragEvent } from "react";
-import {
-    PublicAPI,
-    Player as RufflePlayer,
-    MovieMetadata,
-    BaseLoadOptions,
-} from "ruffle-core";
+import { Setup, Player as RufflePlayer, Config } from "ruffle-core";
 
 export interface PlayerAttributes {
     id?: string | undefined;
     children?: ReactNode;
-    onLoadedMetadata: (metadata: MovieMetadata) => void;
-    baseConfig?: BaseLoadOptions;
+    onLoadedMetadata: (metadata: RufflePlayer.MovieMetadata) => void;
+    baseConfig?: Config.BaseLoadOptions;
     onDragEnter: (event: DragEvent<HTMLElement>) => void;
     onDragLeave: (event: DragEvent<HTMLElement>) => void;
     onDragOver: (event: DragEvent<HTMLElement>) => void;
@@ -19,7 +14,7 @@ export interface PlayerAttributes {
 
 export class Player extends React.Component<PlayerAttributes> {
     private readonly container: React.RefObject<HTMLDivElement>;
-    private player: RufflePlayer | null = null;
+    private player: RufflePlayer.PlayerElement | null = null;
 
     // [NA] Ruffle has a bug where if you load a swf whilst it's already loading another swf, it breaks
     // Combine this with React testing everything by loading things twice to catch bugs - well, they caught the bug for sure.
@@ -33,7 +28,7 @@ export class Player extends React.Component<PlayerAttributes> {
     }
 
     componentDidMount() {
-        this.player = (window.RufflePlayer as PublicAPI)
+        this.player = (window.RufflePlayer as Setup.PublicAPI)
             .newest()!
             .createPlayer()!;
         this.player.id = "player";
@@ -78,7 +73,7 @@ export class Player extends React.Component<PlayerAttributes> {
         }
     }
 
-    loadUrl(url: string, options: BaseLoadOptions) {
+    loadUrl(url: string, options: Config.BaseLoadOptions) {
         if (!this.isLoading) {
             this.isLoading = true;
             this.player

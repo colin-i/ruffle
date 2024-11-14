@@ -48,6 +48,8 @@ pub use crate::display_object::container::{
 pub use avm1_button::{Avm1Button, ButtonState, ButtonTracking};
 pub use avm2_button::Avm2Button;
 pub use bitmap::{Bitmap, BitmapClass};
+#[allow(unused)]
+pub use edit_text::LayoutDebugBoxesFlag;
 pub use edit_text::{AutoSizeMode, EditText, TextSelection};
 pub use graphic::Graphic;
 pub use interactive::{Avm2MousePick, InteractiveObject, TInteractiveObject};
@@ -268,7 +270,7 @@ pub struct DisplayObjectBase<'gc> {
     cache: Option<BitmapCache>,
 }
 
-impl<'gc> Default for DisplayObjectBase<'gc> {
+impl Default for DisplayObjectBase<'_> {
     fn default() -> Self {
         Self {
             parent: Default::default(),
@@ -967,31 +969,28 @@ pub fn render_base<'gc>(this: DisplayObject<'gc>, context: &mut RenderContext<'_
                 true,
                 &context.stage.view_matrix(),
             );
-            context.commands.draw_rect(
-                background,
-                Matrix::create_box(
-                    bounds.width().to_pixels() as f32,
-                    bounds.height().to_pixels() as f32,
-                    bounds.x_min,
-                    bounds.y_min,
-                ),
-            );
+            context
+                .commands
+                .draw_rect(background, Matrix::create_box_from_rectangle(&bounds));
         }
         apply_standard_mask_and_scroll(this, context, |context| this.render_self(context));
     }
 
     if let Some(original_commands) = original_commands {
         let sub_commands = std::mem::replace(&mut context.commands, original_commands);
-        let render_blend_mode = if let ExtendedBlendMode::Shader = blend_mode {
-            // Note - Flash appears to let you set `dobj.blendMode = BlendMode.SHADER` without
-            // having `dobj.blendShader` result, but the resulting rendered displayobject
-            // seems to be corrupted. For now, let's panic, and see if any swfs actually
-            // rely on this behavior.
-            RenderBlendMode::Shader(this.blend_shader().expect("Missing blend shader"))
-        } else {
-            RenderBlendMode::Builtin(blend_mode.try_into().unwrap())
-        };
-        context.commands.blend(sub_commands, render_blend_mode);
+        // If there's nothing to draw, throw away the blend entirely.
+        if !sub_commands.is_empty() {
+            let render_blend_mode = if let ExtendedBlendMode::Shader = blend_mode {
+                // Note - Flash appears to let you set `dobj.blendMode = BlendMode.SHADER` without
+                // having `dobj.blendShader` result, but the resulting rendered displayobject
+                // seems to be corrupted. For now, let's panic, and see if any swfs actually
+                // rely on this behavior.
+                RenderBlendMode::Shader(this.blend_shader().expect("Missing blend shader"))
+            } else {
+                RenderBlendMode::Builtin(blend_mode.try_into().unwrap())
+            };
+            context.commands.blend(sub_commands, render_blend_mode);
+        }
     }
 
     context.transform_stack.pop();
@@ -2147,10 +2146,6 @@ pub trait TDisplayObject<'gc>:
                 stage_object.unregister_text_field_bindings(context);
             }
         }
-
-        context
-            .audio_manager
-            .stop_sounds_with_display_object(context.audio, (*self).into());
 
         self.set_avm1_removed(context.gc_context, true);
     }

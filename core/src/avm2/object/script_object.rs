@@ -73,10 +73,6 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
     fn as_ptr(&self) -> *const ObjectPtr {
         Gc::as_ptr(self.0) as *const ObjectPtr
     }
-
-    fn value_of(&self, _mc: &Mutation<'gc>) -> Result<Value<'gc>, Error<'gc>> {
-        Ok(Value::Object(Object::from(*self)))
-    }
 }
 
 fn maybe_int_property(name: AvmString<'_>) -> DynamicKey<'_> {
@@ -247,12 +243,12 @@ impl<'gc> ScriptObjectWrapper<'gc> {
         // as dynamic properties that have not yet been set, and yield
         // `undefined`
         if self.is_sealed() {
-            return Err(error::make_reference_error(
+            Err(error::make_reference_error(
                 activation,
                 error::ReferenceErrorCode::InvalidRead,
                 multiname,
                 self.instance_class(),
-            ));
+            ))
         } else {
             Ok(Value::Undefined)
         }
@@ -448,7 +444,7 @@ impl<'gc> ScriptObjectWrapper<'gc> {
     }
 }
 
-impl<'gc> Debug for ScriptObject<'gc> {
+impl Debug for ScriptObject<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         f.debug_struct("ScriptObject")
             .field("name", &ScriptObjectWrapper(self.0).debug_class_name())

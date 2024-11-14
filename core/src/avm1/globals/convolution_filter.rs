@@ -95,7 +95,7 @@ impl Default for ConvolutionFilterData {
     }
 }
 
-#[derive(Clone, Debug, Collect)]
+#[derive(Copy, Clone, Debug, Collect)]
 #[collect(no_drop)]
 #[repr(transparent)]
 pub struct ConvolutionFilter<'gc>(GcCell<'gc, ConvolutionFilterData>);
@@ -121,7 +121,18 @@ impl<'gc> ConvolutionFilter<'gc> {
         convolution_filter.set_bias(activation, args.get(4))?;
         convolution_filter.set_preserve_alpha(activation, args.get(5))?;
         convolution_filter.set_clamp(activation, args.get(6))?;
-        convolution_filter.set_color(activation, args.get(7))?;
+        if let Some(value) = args.get(7) {
+            convolution_filter.set_color(activation, Some(value))?;
+
+            // If a substitute color is specified in the constructor in AVM1,
+            // the substitute alpha is set to 1, despite the documentation claiming otherwise.
+            // This does not happen in AVM2.
+            convolution_filter
+                .0
+                .write(activation.context.gc_context)
+                .color
+                .a = 255;
+        }
         convolution_filter.set_alpha(activation, args.get(8))?;
         Ok(convolution_filter)
     }

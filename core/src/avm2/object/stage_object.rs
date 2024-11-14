@@ -2,11 +2,11 @@
 
 use crate::avm2::activation::Activation;
 use crate::avm2::object::script_object::ScriptObjectData;
-use crate::avm2::object::{ClassObject, Object, ObjectPtr, TObject};
+use crate::avm2::object::{ClassObject, ObjectPtr, TObject};
 use crate::avm2::value::Value;
 use crate::avm2::Error;
 use crate::display_object::DisplayObject;
-use gc_arena::{Collect, Gc, GcWeak, Mutation};
+use gc_arena::{Collect, Gc, GcWeak};
 use std::fmt::Debug;
 
 #[derive(Clone, Collect, Copy)]
@@ -127,13 +127,9 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
     fn as_display_object(&self) -> Option<DisplayObject<'gc>> {
         Some(self.0.display_object)
     }
-
-    fn value_of(&self, _mc: &Mutation<'gc>) -> Result<Value<'gc>, Error<'gc>> {
-        Ok(Value::Object(Object::from(*self)))
-    }
 }
 
-impl<'gc> Debug for StageObject<'gc> {
+impl Debug for StageObject<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         f.debug_struct("StageObject")
             .field("name", &self.base().debug_class_name())

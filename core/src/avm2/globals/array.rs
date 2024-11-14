@@ -73,10 +73,7 @@ pub fn instance_init<'gc>(
 
     if let Some(mut array) = this.as_array_storage_mut(activation.context.gc_context) {
         if args.len() == 1 {
-            if let Some(expected_len) = args
-                .get(0)
-                .and_then(|v| v.as_number(activation.context.gc_context).ok())
-            {
+            if let Some(expected_len) = args.get(0).filter(|v| v.is_number()).map(|v| v.as_f64()) {
                 if expected_len < 0.0 || expected_len.is_nan() || expected_len.fract() != 0.0 {
                     return Err(Error::AvmError(range_error(
                         activation,
@@ -253,7 +250,7 @@ where
             let item = resolve_array_hole(activation, this, i, item)?;
 
             if matches!(item, Value::Undefined) || matches!(item, Value::Null) {
-                accum.push("".into());
+                accum.push(activation.strings().empty());
             } else {
                 accum.push(conv(item, activation)?.coerce_to_string(activation)?);
             }

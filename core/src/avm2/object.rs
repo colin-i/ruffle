@@ -20,7 +20,7 @@ use crate::bitmap::bitmap_data::BitmapDataWrapper;
 use crate::display_object::DisplayObject;
 use crate::html::TextFormat;
 use crate::streams::NetStream;
-use crate::string::AvmString;
+use crate::string::{AvmString, StringContext};
 use gc_arena::{Collect, Gc, Mutation};
 use ruffle_macros::enum_trait_object;
 use std::cell::{Ref, RefMut};
@@ -55,6 +55,7 @@ mod regexp_object;
 mod responder_object;
 mod script_object;
 mod shader_data_object;
+mod shared_object_object;
 mod socket_object;
 mod sound_object;
 mod soundchannel_object;
@@ -127,6 +128,9 @@ pub use crate::avm2::object::script_object::{
 pub use crate::avm2::object::shader_data_object::{
     shader_data_allocator, ShaderDataObject, ShaderDataObjectWeak,
 };
+pub use crate::avm2::object::shared_object_object::{
+    shared_object_allocator, SharedObjectObject, SharedObjectObjectWeak,
+};
 pub use crate::avm2::object::socket_object::{socket_allocator, SocketObject, SocketObjectWeak};
 pub use crate::avm2::object::sound_object::{
     sound_allocator, QueuedPlay, SoundObject, SoundObjectWeak,
@@ -198,6 +202,7 @@ use crate::font::Font;
         FileReferenceObject(FileReferenceObject<'gc>),
         FontObject(FontObject<'gc>),
         LocalConnectionObject(LocalConnectionObject<'gc>),
+        SharedObjectObject(SharedObjectObject<'gc>),
     }
 )]
 pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy {
@@ -269,14 +274,12 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
             Some(Property::Virtual { get: Some(get), .. }) => {
                 self.call_method(get, &[], activation)
             }
-            Some(Property::Virtual { get: None, .. }) => {
-                return Err(error::make_reference_error(
-                    activation,
-                    error::ReferenceErrorCode::ReadFromWriteOnly,
-                    multiname,
-                    self.instance_class(),
-                ));
-            }
+            Some(Property::Virtual { get: None, .. }) => Err(error::make_reference_error(
+                activation,
+                error::ReferenceErrorCode::ReadFromWriteOnly,
+                multiname,
+                self.instance_class(),
+            )),
             None => self.get_property_local(multiname, activation),
         }
     }
@@ -362,23 +365,23 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
                     return self.set_property_local(multiname, value, activation);
                 }
 
-                return Err(error::make_reference_error(
+                Err(error::make_reference_error(
                     activation,
                     error::ReferenceErrorCode::AssignToMethod,
                     multiname,
                     self.instance_class(),
-                ));
+                ))
             }
             Some(Property::Virtual { set: Some(set), .. }) => {
                 self.call_method(set, &[value], activation).map(|_| ())
             }
             Some(Property::ConstSlot { .. }) | Some(Property::Virtual { set: None, .. }) => {
-                return Err(error::make_reference_error(
+                Err(error::make_reference_error(
                     activation,
                     error::ReferenceErrorCode::WriteToReadOnly,
                     multiname,
                     self.instance_class(),
-                ));
+                ))
             }
             None => self.set_property_local(multiname, value, activation),
         }
@@ -437,25 +440,21 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
 
                 Ok(())
             }
-            Some(Property::Method { .. }) => {
-                return Err(error::make_reference_error(
-                    activation,
-                    error::ReferenceErrorCode::AssignToMethod,
-                    multiname,
-                    self.instance_class(),
-                ));
-            }
+            Some(Property::Method { .. }) => Err(error::make_reference_error(
+                activation,
+                error::ReferenceErrorCode::AssignToMethod,
+                multiname,
+                self.instance_class(),
+            )),
             Some(Property::Virtual { set: Some(set), .. }) => {
                 self.call_method(set, &[value], activation).map(|_| ())
             }
-            Some(Property::Virtual { set: None, .. }) => {
-                return Err(error::make_reference_error(
-                    activation,
-                    error::ReferenceErrorCode::WriteToReadOnly,
-                    multiname,
-                    self.instance_class(),
-                ));
-            }
+            Some(Property::Virtual { set: None, .. }) => Err(error::make_reference_error(
+                activation,
+                error::ReferenceErrorCode::WriteToReadOnly,
+                multiname,
+                self.instance_class(),
+            )),
             None => self.init_property_local(multiname, value, activation),
         }
     }
@@ -519,14 +518,12 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
 
                 obj.call(Value::from(self.into()), arguments, activation)
             }
-            Some(Property::Virtual { get: None, .. }) => {
-                return Err(error::make_reference_error(
-                    activation,
-                    error::ReferenceErrorCode::ReadFromWriteOnly,
-                    multiname,
-                    self.instance_class(),
-                ));
-            }
+            Some(Property::Virtual { get: None, .. }) => Err(error::make_reference_error(
+                activation,
+                error::ReferenceErrorCode::ReadFromWriteOnly,
+                multiname,
+                self.instance_class(),
+            )),
             None => self.call_property_local(multiname, arguments, activation),
         }
     }
@@ -987,7 +984,12 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     ///
     /// `valueOf` is a method used to request an object be coerced to a
     /// primitive value. Typically, this would be a number of some kind.
-    fn value_of(&self, mc: &Mutation<'gc>) -> Result<Value<'gc>, Error<'gc>>;
+    ///
+    /// The default implementation wraps the object in a `Value`, using the
+    /// `Into<Object<'gc>>` implementation.
+    fn value_of(&self, _context: &mut StringContext<'gc>) -> Result<Value<'gc>, Error<'gc>> {
+        Ok(Value::Object((*self).into()))
+    }
 
     /// Determine if this object is an instance of a given type.
     ///
@@ -1363,6 +1365,10 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn as_file_reference(&self) -> Option<FileReferenceObject<'gc>> {
         None
     }
+
+    fn as_shared_object(&self) -> Option<SharedObjectObject<'gc>> {
+        None
+    }
 }
 
 pub enum ObjectPtr {}
@@ -1414,19 +1420,20 @@ impl<'gc> Object<'gc> {
             Self::FileReferenceObject(o) => WeakObject::FileReferenceObject(FileReferenceObjectWeak(Gc::downgrade(o.0))),
             Self::FontObject(o) => WeakObject::FontObject(FontObjectWeak(Gc::downgrade(o.0))),
             Self::LocalConnectionObject(o) => WeakObject::LocalConnectionObject(LocalConnectionObjectWeak(Gc::downgrade(o.0))),
+            Self::SharedObjectObject(o) => WeakObject::SharedObjectObject(SharedObjectObjectWeak(Gc::downgrade(o.0))),
         }
     }
 }
 
-impl<'gc> PartialEq for Object<'gc> {
+impl PartialEq for Object<'_> {
     fn eq(&self, other: &Self) -> bool {
         Object::ptr_eq(*self, *other)
     }
 }
 
-impl<'gc> Eq for Object<'gc> {}
+impl Eq for Object<'_> {}
 
-impl<'gc> Hash for Object<'gc> {
+impl Hash for Object<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.as_ptr().hash(state);
     }
@@ -1475,6 +1482,7 @@ pub enum WeakObject<'gc> {
     FileReferenceObject(FileReferenceObjectWeak<'gc>),
     FontObject(FontObjectWeak<'gc>),
     LocalConnectionObject(LocalConnectionObjectWeak<'gc>),
+    SharedObjectObject(SharedObjectObjectWeak<'gc>),
 }
 
 impl<'gc> WeakObject<'gc> {
@@ -1519,6 +1527,7 @@ impl<'gc> WeakObject<'gc> {
             Self::FileReferenceObject(o) => FileReferenceObject(o.0.upgrade(mc)?).into(),
             Self::FontObject(o) => FontObject(o.0.upgrade(mc)?).into(),
             Self::LocalConnectionObject(o) => LocalConnectionObject(o.0.upgrade(mc)?).into(),
+            Self::SharedObjectObject(o) => SharedObjectObject(o.0.upgrade(mc)?).into(),
         })
     }
 }

@@ -27,7 +27,7 @@ pub fn event_allocator<'gc>(
         activation.context.gc_context,
         EventObjectData {
             base,
-            event: RefLock::new(Event::new("")),
+            event: RefLock::new(Event::new(activation.strings().empty())),
         },
     ))
     .into())
@@ -359,10 +359,6 @@ impl<'gc> TObject<'gc> for EventObject<'gc> {
         Gc::as_ptr(self.0) as *const ObjectPtr
     }
 
-    fn value_of(&self, _mc: &Mutation<'gc>) -> Result<Value<'gc>, Error<'gc>> {
-        Ok(Value::Object((*self).into()))
-    }
-
     fn as_event(&self) -> Option<Ref<Event<'gc>>> {
         Some(self.0.event.borrow())
     }
@@ -372,7 +368,7 @@ impl<'gc> TObject<'gc> for EventObject<'gc> {
     }
 }
 
-impl<'gc> Debug for EventObject<'gc> {
+impl Debug for EventObject<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         f.debug_struct("EventObject")
             .field("type", &self.0.event.borrow().event_type())

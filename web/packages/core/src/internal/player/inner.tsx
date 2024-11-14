@@ -7,8 +7,9 @@ import {
     UnmuteOverlay,
     URLLoadOptions,
     WindowMode,
-} from "../../load-options";
-import type { MovieMetadata } from "../../movie-metadata";
+    DEFAULT_CONFIG,
+} from "../../public/config";
+import type { MovieMetadata } from "../../public/player";
 import { ruffleShadowTemplate } from "../ui/shadow-template";
 import { text, textAsParagraphs } from "../i18n";
 import { swfFileName } from "../../swf-utils";
@@ -25,7 +26,6 @@ import { showPanicScreen } from "../ui/panic";
 import { createRuffleBuilder } from "../../load-ruffle";
 import { lookupElement } from "../register-element";
 import { configureBuilder } from "../builder";
-import { DEFAULT_CONFIG } from "../../config";
 
 const DIMENSION_REGEX = /^\s*(\d+(\.\d+)?(%)?)/;
 
@@ -42,7 +42,13 @@ declare global {
         webkitCancelFullScreen?: () => void;
     }
     interface Element {
+        /**
+         * @ignore
+         */
         webkitRequestFullscreen?: (options: unknown) => unknown;
+        /**
+         * @ignore
+         */
         webkitRequestFullScreen?: (options: unknown) => unknown;
     }
 }
@@ -195,7 +201,7 @@ export class InnerPlayer {
         this.debugPlayerInfo = debugPlayerInfo;
         this.onCallbackAvailable = onCallbackAvailable;
 
-        this.shadow = this.element.attachShadow({ mode: "open" });
+        this.shadow = this.element.attachShadow({ mode: "open", delegatesFocus: true });
         this.shadow.appendChild(ruffleShadowTemplate.content.cloneNode(true));
 
         this.dynamicStyles = this.shadow.getElementById(
@@ -1572,6 +1578,7 @@ export class InnerPlayer {
                             "menu-item": true,
                             disabled: enabled === false,
                         }}
+                        data-text={text}
                     >
                         {text}
                     </li>
@@ -1592,7 +1599,7 @@ export class InnerPlayer {
 
                         // Then we have to close the context menu manually after the callback finishes.
                         this.hideContextMenu();
-                    }
+                    };
                     if (this.contextMenuSupported) {
                         menuItem.addEventListener("click", itemAction);
                         menuItem.addEventListener("contextmenu", itemAction);

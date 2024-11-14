@@ -31,7 +31,6 @@ use crate::vminterface::{AvmObject, Instantiator};
 use chrono::DateTime;
 use chrono::Utc;
 use core::fmt;
-use either::Either;
 use gc_arena::{Collect, Gc, GcCell, Mutation};
 use ruffle_render::commands::CommandHandler;
 use ruffle_render::quality::StageQuality;
@@ -162,6 +161,10 @@ pub struct EditTextData<'gc> {
     #[collect(require_static)]
     flags: EditTextFlag,
 
+    /// Flags specifying how layout debug boxes should be drawn.
+    #[collect(require_static)]
+    layout_debug_boxes_flags: LayoutDebugBoxesFlag,
+
     /// Whether this EditText represents an AVM2 TextLine.
     is_tlf: bool,
 
@@ -174,7 +177,7 @@ pub struct EditTextData<'gc> {
     last_click: Option<ClickEventData>,
 }
 
-impl<'gc> EditTextData<'gc> {
+impl EditTextData<'_> {
     fn vertical_scroll_offset(&self) -> Twips {
         if self.scroll > 1 {
             let lines = self.layout.lines();
@@ -193,6 +196,13 @@ impl<'gc> EditTextData<'gc> {
 impl<'gc> EditText<'gc> {
     // This seems to be OS-independent
     const INPUT_NEWLINE: char = '\r';
+
+    /// Gutter is the constant internal padding of a text field.
+    /// It applies to each side and cannot be changed.
+    ///
+    /// See <https://open-flash.github.io/mirrors/as2-language-reference/TextFormat.html#getTextExtent()>.
+    /// See <https://help.adobe.com/en_US/FlashPlatform/reference/actionscript/3/flash/text/TextLineMetrics.html>.
+    const GUTTER: Twips = Twips::new(40);
 
     /// Creates a new `EditText` from an SWF `DefineEditText` tag.
     pub fn from_swf_tag(
@@ -236,15 +246,10 @@ impl<'gc> EditText<'gc> {
             &text_spans,
             context,
             swf_movie.clone(),
-            swf_tag.bounds().width() - Twips::from_pixels(Self::INTERNAL_PADDING * 2.0),
+            swf_tag.bounds().width() - Self::GUTTER * 2,
             swf_tag.is_word_wrap(),
             font_type,
         );
-
-        let mut base = InteractiveObjectBase::default();
-
-        base.base.matrix_mut().tx = swf_tag.bounds().x_min;
-        base.base.matrix_mut().ty = swf_tag.bounds().y_min;
 
         let variable = if !swf_tag.variable_name().is_empty() {
             Some(swf_tag.variable_name())
@@ -271,7 +276,7 @@ impl<'gc> EditText<'gc> {
         let et = EditText(GcCell::new(
             context.gc_context,
             EditTextData {
-                base,
+                base: InteractiveObjectBase::default(),
                 text_spans,
                 static_data: Gc::new(
                     context.gc_context,
@@ -304,6 +309,7 @@ impl<'gc> EditText<'gc> {
                 is_tlf: false,
                 restrict: EditTextRestrict::allow_all(),
                 last_click: None,
+                layout_debug_boxes_flags: LayoutDebugBoxesFlag::empty(),
             },
         ));
 
@@ -625,18 +631,42 @@ impl<'gc> EditText<'gc> {
         self.0.write(gc_context).is_tlf = is_tlf;
     }
 
-    pub fn draw_layout_boxes(self) -> bool {
-        self.0
-            .read()
-            .flags
-            .contains(EditTextFlag::DRAW_LAYOUT_BOXES)
+    pub fn layout_debug_boxes_flag(self, flag: LayoutDebugBoxesFlag) -> bool {
+        self.0.read().layout_debug_boxes_flags.contains(flag)
     }
 
-    pub fn set_draw_layout_boxes(self, context: &mut UpdateContext<'gc>, value: bool) {
+    pub fn set_layout_debug_boxes_flag(
+        self,
+        context: &mut UpdateContext<'gc>,
+        flag: LayoutDebugBoxesFlag,
+        value: bool,
+    ) {
         self.0
             .write(context.gc())
-            .flags
-            .set(EditTextFlag::DRAW_LAYOUT_BOXES, value);
+            .layout_debug_boxes_flags
+            .set(flag, value);
+    }
+
+    /// Returns the matrix for transforming from layout
+    /// coordinate space into this object's local space.
+    fn layout_to_local_matrix(self, data: &EditTextData) -> Matrix {
+        Matrix::translate(
+            data.bounds.x_min + Self::GUTTER - Twips::from_pixels(data.hscroll),
+            data.bounds.y_min + Self::GUTTER - data.vertical_scroll_offset(),
+        )
+    }
+
+    /// Returns the matrix for transforming from this object's
+    /// local space into its layout coordinate space.
+    fn local_to_layout_matrix(self, data: &EditTextData) -> Matrix {
+        // layout_to_local contains only a translation,
+        // no need to inverse the matrix generically.
+        let Matrix { tx, ty, .. } = self.layout_to_local_matrix(data);
+        Matrix::translate(-tx, -ty)
+    }
+
+    fn local_to_layout(&self, data: &EditTextData, local: Point<Twips>) -> Point<Twips> {
+        self.local_to_layout_matrix(data) * local
     }
 
     pub fn replace_text(
@@ -649,7 +679,7 @@ impl<'gc> EditText<'gc> {
         self.0
             .write(context.gc_context)
             .text_spans
-            .replace_text(from, to, text, None);
+            .replace_text(from, to, text);
         self.relayout(context);
     }
 
@@ -726,16 +756,6 @@ impl<'gc> EditText<'gc> {
         self.try_bind_text_field_variable(activation, true);
     }
 
-    /// Construct a base text transform for this `EditText`, to be used for
-    /// evaluating fonts.
-    ///
-    /// The `text_transform` constitutes the base transform that all text is
-    /// written into.
-
-    /// Internal padding between the bounds of the EditText and the text.
-    /// Applies to each side.
-    const INTERNAL_PADDING: f64 = 2.0;
-
     /// Relayout the `EditText`.
     ///
     /// This function operates exclusively with the text-span representation of
@@ -747,7 +767,7 @@ impl<'gc> EditText<'gc> {
         let autosize = edit_text.autosize;
         let is_word_wrap = edit_text.flags.contains(EditTextFlag::WORD_WRAP);
         let movie = edit_text.static_data.swf.clone();
-        let padding = Twips::from_pixels(EditText::INTERNAL_PADDING) * 2;
+        let padding = Self::GUTTER * 2;
 
         if edit_text.flags.contains(EditTextFlag::PASSWORD) {
             // If the text is a password, hide the text
@@ -895,6 +915,43 @@ impl<'gc> EditText<'gc> {
         }
     }
 
+    fn render_debug_boxes(
+        self,
+        context: &mut RenderContext<'_, 'gc>,
+        flags: LayoutDebugBoxesFlag,
+        layout: &Layout<'gc>,
+    ) {
+        if flags.contains(LayoutDebugBoxesFlag::CHAR) {
+            for i in 0..self.text().len() {
+                if let Some(bounds) = layout.char_bounds(i) {
+                    context.draw_rect_outline(Color::MAGENTA, bounds, Twips::ONE);
+                }
+            }
+        }
+        if flags.contains(LayoutDebugBoxesFlag::BOX) {
+            for lbox in layout.boxes_iter() {
+                context.draw_rect_outline(Color::RED, lbox.bounds().into(), Twips::ONE);
+            }
+        }
+        if flags.contains(LayoutDebugBoxesFlag::LINE) {
+            for line in layout.lines() {
+                context.draw_rect_outline(Color::BLUE, line.bounds().into(), Twips::ONE);
+            }
+        }
+        if flags.contains(LayoutDebugBoxesFlag::TEXT) {
+            context.draw_rect_outline(Color::GREEN, layout.bounds().into(), Twips::ONE);
+        }
+        if flags.contains(LayoutDebugBoxesFlag::TEXT_EXTERIOR) {
+            context.draw_rect_outline(Color::GREEN, layout.exterior_bounds().into(), Twips::ONE);
+        }
+    }
+
+    fn render_layout_line(self, context: &mut RenderContext<'_, 'gc>, line: &LayoutLine<'gc>) {
+        for layout_box in line.boxes_iter() {
+            self.render_layout_box(context, layout_box);
+        }
+    }
+
     /// Render a layout box, plus its children.
     fn render_layout_box(self, context: &mut RenderContext<'_, 'gc>, lbox: &LayoutBox<'gc>) {
         let origin = lbox.bounds().origin();
@@ -904,13 +961,12 @@ impl<'gc> EditText<'gc> {
         // If text's top is under the textbox's bottom, skip drawing.
         // TODO: FP actually skips drawing a line as soon as its bottom is under the textbox;
         //   Current logic is conservative for safety (and even of this I'm not 100% sure).
-        // TODO: we should also cull text that's above the textbox
-        //   (instead of culling, this can be implemented as having the loop start from `scrollY`th line)
         //   (maybe we could cull-before-render all glyphs, thus removing the need for masking?)
+        // [KJ] FP always displays the first visible line (sometimes masked, sometimes sticking out of bounds),
+        //      culls any other line which is not fully visible; masking is always used for left/right bounds
         // TODO: also cull text that's simply out of screen, just like we cull whole DOs in render_self().
-        if origin.y() + Twips::from_pixels(Self::INTERNAL_PADDING)
-            - edit_text.vertical_scroll_offset()
-            > edit_text.bounds.y_max
+        if origin.y() + Self::GUTTER - edit_text.vertical_scroll_offset()
+            > edit_text.bounds.height()
         {
             return;
         }
@@ -1282,37 +1338,26 @@ impl<'gc> EditText<'gc> {
 
     pub fn screen_position_to_index(self, position: Point<Twips>) -> Option<usize> {
         let text = self.0.read();
-        let mut position = self.global_to_local(position)?;
-        position.x += Twips::from_pixels(Self::INTERNAL_PADDING) + Twips::from_pixels(text.hscroll);
-        position.y += Twips::from_pixels(Self::INTERNAL_PADDING) + text.vertical_scroll_offset();
+        let position = self.global_to_local(position)?;
+        let position = self.local_to_layout(&text, position);
 
         // TODO We can use binary search for both y and x here
 
         // First determine which line of text is the closest match to the Y position...
-        let mut closest_line: Option<&LayoutLine> = None;
-        for line in text.layout.lines().iter() {
-            if let Some(closest_extent_y) = closest_line.map(|l| l.bounds().extent_y()) {
-                if line.bounds().extent_y() > closest_extent_y
-                    && position.y >= line.bounds().offset_y()
-                {
-                    closest_line = Some(line);
-                }
-            } else {
-                closest_line = Some(line);
-            }
-        }
+        let line_index = text
+            .layout
+            .find_line_index_by_y(position.y)
+            .unwrap_or_else(|i| i);
+        let line = text.layout.lines().get(line_index)?;
 
         // ...then find the box within that line that is the closest match to the X position.
         let mut closest_layout_box: Option<&LayoutBox<'gc>> = None;
-        if let Some(line) = closest_line {
-            for layout_box in line.boxes_iter() {
-                if layout_box.is_text_box() {
-                    if position.x >= layout_box.bounds().offset_x() || closest_layout_box.is_none()
-                    {
-                        closest_layout_box = Some(layout_box);
-                    } else {
-                        break;
-                    }
+        for layout_box in line.boxes_iter() {
+            if layout_box.is_text_box() {
+                if position.x >= layout_box.bounds().offset_x() || closest_layout_box.is_none() {
+                    closest_layout_box = Some(layout_box);
+                } else {
+                    break;
                 }
             }
         }
@@ -1868,19 +1913,15 @@ impl<'gc> EditText<'gc> {
         self.0.read().layout.lines().len()
     }
 
-    /// Calculate the layout metrics for a given line.
+    /// Calculate the layout metrics.
     ///
-    /// Returns `None` if the line does not exist or there is not enough data
-    /// about the line to calculate metrics with.
-    pub fn layout_metrics(self, line: Option<usize>) -> Option<LayoutMetrics> {
+    /// Returns `None` if there is not enough data
+    /// about the layout to calculate metrics with.
+    pub fn layout_metrics(self) -> Option<LayoutMetrics> {
         let layout = &self.0.read().layout;
-        let line = line.and_then(|line| layout.lines().get(line));
 
-        let (boxes, union_bounds) = if let Some(line) = line {
-            (Either::Left(line.boxes_iter()), line.bounds())
-        } else {
-            (Either::Right(layout.boxes_iter()), layout.bounds())
-        };
+        let boxes = layout.boxes_iter();
+        let union_bounds = layout.bounds();
 
         let mut first_font = None;
         let mut first_format = None;
@@ -1913,7 +1954,22 @@ impl<'gc> EditText<'gc> {
             leading,
             width: union_bounds.width(),
             height: union_bounds.height() + descent + leading,
-            x: union_bounds.offset_x() + Twips::from_pixels(EditText::INTERNAL_PADDING),
+            x: union_bounds.offset_x() + Self::GUTTER,
+        })
+    }
+
+    pub fn line_metrics(self, line: usize) -> Option<LayoutMetrics> {
+        let layout = &self.0.read().layout;
+        let line = layout.lines().get(line)?;
+        let bounds = line.bounds();
+
+        Some(LayoutMetrics {
+            ascent: line.ascent(),
+            descent: line.descent(),
+            leading: line.leading(),
+            width: bounds.width(),
+            height: bounds.height() + line.leading(),
+            x: bounds.offset_x() + Self::GUTTER,
         })
     }
 
@@ -1978,6 +2034,14 @@ impl<'gc> EditText<'gc> {
         Some(index - start_index)
     }
 
+    pub fn char_bounds(self, index: usize) -> Option<Rectangle<Twips>> {
+        let edit_text = self.0.read();
+        let bounds = edit_text.layout.char_bounds(index)?;
+        let padding = Self::GUTTER;
+        let bounds = Matrix::translate(padding, padding) * bounds;
+        Some(bounds)
+    }
+
     fn execute_avm1_asfunction(
         self,
         context: &mut UpdateContext<'gc>,
@@ -2034,8 +2098,8 @@ impl<'gc> EditText<'gc> {
         let Some(mut position) = self.global_to_local(point) else {
             return false;
         };
-        position.x += Twips::from_pixels(Self::INTERNAL_PADDING) + Twips::from_pixels(text.hscroll);
-        position.y += Twips::from_pixels(Self::INTERNAL_PADDING) + text.vertical_scroll_offset();
+        position.x += Self::GUTTER + Twips::from_pixels(text.hscroll);
+        position.y += Self::GUTTER + text.vertical_scroll_offset();
 
         text.layout.boxes_iter().any(|layout| {
             layout.is_link()
@@ -2284,52 +2348,30 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
             }
         }
 
-        context.transform_stack.push(&Transform {
-            matrix: Matrix::translate(edit_text.bounds.x_min, edit_text.bounds.y_min),
-            ..Default::default()
-        });
-
         context.commands.push_mask();
-        let mask = Matrix::create_box(
-            edit_text.bounds.width().to_pixels() as f32,
-            edit_text.bounds.height().to_pixels() as f32,
-            Twips::ZERO,
-            Twips::ZERO,
-        );
+        let mask = Matrix::create_box_from_rectangle(&edit_text.bounds);
         context.commands.draw_rect(
             Color::WHITE,
             context.transform_stack.transform().matrix * mask,
         );
         context.commands.activate_mask();
 
-        let scroll_offset = edit_text.vertical_scroll_offset();
-        // TODO: Where does this come from? How is this different than INTERNAL_PADDING? Does this apply to y as well?
-        // If this is actually right, offset the border in `redraw_border` instead of doing an extra push.
         context.transform_stack.push(&Transform {
-            matrix: Matrix::translate(
-                Twips::from_pixels(Self::INTERNAL_PADDING) - Twips::from_pixels(edit_text.hscroll),
-                Twips::from_pixels(Self::INTERNAL_PADDING) - scroll_offset,
-            ),
+            matrix: self.layout_to_local_matrix(&edit_text),
             ..Default::default()
         });
 
-        {
-            let draw_boxes = edit_text.flags.contains(EditTextFlag::DRAW_LAYOUT_BOXES);
-            if draw_boxes {
-                context.draw_rect_outline(
-                    Color::GREEN,
-                    edit_text.layout.exterior_bounds().into(),
-                    Twips::ONE,
-                );
-            }
-
-            for layout_box in edit_text.layout.boxes_iter() {
-                if draw_boxes {
-                    context.draw_rect_outline(Color::RED, layout_box.bounds().into(), Twips::ONE);
-                }
-                self.render_layout_box(context, layout_box);
-            }
+        // Skip lines that are off-screen.
+        let lines_to_skip = self.scroll().saturating_sub(1);
+        for line in edit_text.layout.lines().iter().skip(lines_to_skip) {
+            self.render_layout_line(context, line);
         }
+
+        self.render_debug_boxes(
+            context,
+            edit_text.layout_debug_boxes_flags,
+            &edit_text.layout,
+        );
 
         context.transform_stack.pop();
 
@@ -2339,8 +2381,6 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
             context.transform_stack.transform().matrix * mask,
         );
         context.commands.pop_mask();
-
-        context.transform_stack.pop();
     }
 
     fn allow_as_mask(&self) -> bool {
@@ -2372,10 +2412,6 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
                 .unbound_text_fields
                 .retain(|&text_field| !DisplayObject::ptr_eq(text_field.into(), (*self).into()));
         }
-
-        context
-            .audio_manager
-            .stop_sounds_with_display_object(context.audio, (*self).into());
 
         self.set_avm1_removed(context.gc_context, true);
     }
@@ -2708,7 +2744,6 @@ bitflags::bitflags! {
     struct EditTextFlag: u16 {
         const FIRING_VARIABLE_BINDING = 1 << 0;
         const HAS_BACKGROUND = 1 << 1;
-        const DRAW_LAYOUT_BOXES = 1 << 2;
         const CONDENSE_WHITE = 1 << 13;
         const ALWAYS_SHOW_SELECTION = 1 << 14;
 
@@ -2724,6 +2759,17 @@ bitflags::bitflags! {
         const NO_SELECT = 1 << 12;
         const SWF_FLAGS = Self::READ_ONLY.bits() | Self::PASSWORD.bits() | Self::MULTILINE.bits() | Self::WORD_WRAP.bits() | Self::USE_OUTLINES.bits() |
                           Self::HTML.bits() | Self::WAS_STATIC.bits() | Self::BORDER.bits() | Self::NO_SELECT.bits();
+    }
+}
+
+bitflags::bitflags! {
+    #[derive(Clone, Copy)]
+    pub struct LayoutDebugBoxesFlag: u8 {
+        const TEXT_EXTERIOR = 1 << 1;
+        const TEXT = 1 << 2;
+        const LINE = 1 << 3;
+        const BOX = 1 << 5;
+        const CHAR = 1 << 7;
     }
 }
 

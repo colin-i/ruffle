@@ -18,13 +18,14 @@ use crate::backend::{
     log::LogBackend,
     navigator::NavigatorBackend,
     storage::StorageBackend,
-    ui::{InputManager, UiBackend},
+    ui::UiBackend,
 };
 use crate::context_menu::ContextMenuState;
 use crate::display_object::{EditText, MovieClip, SoundTransform, Stage};
 use crate::external::ExternalInterface;
 use crate::focus_tracker::FocusTracker;
 use crate::frame_lifecycle::FramePhase;
+use crate::input::InputManager;
 use crate::library::Library;
 use crate::loader::LoadManager;
 use crate::local_connection::LocalConnections;
@@ -257,7 +258,7 @@ impl<'gc> UpdateContext<'gc> {
         sound: SoundHandle,
         settings: &swf::SoundInfo,
         owner: Option<DisplayObject<'gc>>,
-        avm1_object: Option<crate::avm1::SoundObject<'gc>>,
+        avm1_object: Option<Avm1Object<'gc>>,
     ) -> Option<SoundInstanceHandle> {
         self.audio_manager
             .start_sound(self.audio, sound, settings, owner, avm1_object)
@@ -284,6 +285,11 @@ impl<'gc> UpdateContext<'gc> {
     pub fn stop_sounds_with_display_object(&mut self, display_object: DisplayObject<'gc>) {
         self.audio_manager
             .stop_sounds_with_display_object(self.audio, display_object)
+    }
+
+    pub fn stop_sounds_on_parent_and_children(&mut self, display_object: DisplayObject<'gc>) {
+        self.audio_manager
+            .stop_sounds_on_parent_and_children(self.audio, display_object)
     }
 
     pub fn stop_all_sounds(&mut self) {
@@ -507,7 +513,7 @@ impl<'gc> ActionQueue<'gc> {
     }
 }
 
-impl<'gc> Default for ActionQueue<'gc> {
+impl Default for ActionQueue<'_> {
     fn default() -> Self {
         Self::new()
     }
@@ -547,7 +553,7 @@ pub struct RenderContext<'a, 'gc> {
     pub stage: Stage<'gc>,
 }
 
-impl<'a, 'gc> RenderContext<'a, 'gc> {
+impl<'gc> RenderContext<'_, 'gc> {
     /// Convenience method to retrieve the current GC context. Note that explicitly writing
     /// `self.gc_context` can be sometimes necessary to satisfy the borrow checker.
     #[inline(always)]

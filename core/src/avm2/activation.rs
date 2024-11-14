@@ -36,10 +36,9 @@ use super::error::make_mismatch_error;
 /// Represents a particular register set.
 ///
 /// This type exists primarily because SmallVec isn't garbage-collectable.
-
 pub struct RegisterSet<'gc>(SmallVec<[Value<'gc>; 8]>);
 
-unsafe impl<'gc> gc_arena::Collect for RegisterSet<'gc> {
+unsafe impl gc_arena::Collect for RegisterSet<'_> {
     #[inline]
     fn trace(&self, cc: &gc_arena::Collection) {
         for register in &self.0 {
@@ -135,12 +134,6 @@ pub struct Activation<'a, 'gc: 'a> {
     /// The index where the scope frame starts.
     scope_depth: usize,
 
-    /// Maximum size for the stack frame.
-    max_stack_size: usize,
-
-    /// Maximum size for the scope frame.
-    max_scope_size: usize,
-
     pub context: &'a mut UpdateContext<'gc>,
 }
 
@@ -180,8 +173,6 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             activation_class: None,
             stack_depth: context.avm2.stack.len(),
             scope_depth: context.avm2.scope_stack.len(),
-            max_stack_size: 0,
-            max_scope_size: 0,
             context,
         }
     }
@@ -210,8 +201,6 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             activation_class: None,
             stack_depth: context.avm2.stack.len(),
             scope_depth: context.avm2.scope_stack.len(),
-            max_stack_size: 0,
-            max_scope_size: 0,
             context,
         }
     }
@@ -224,17 +213,14 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     ) -> Result<Self, Error<'gc>> {
         let (method, global_object, domain) = script.init();
 
-        let (num_locals, max_stack, max_scope) = match method {
-            Method::Native { .. } => (0, 0, 0),
+        let num_locals = match method {
+            Method::Native { .. } => 0,
             Method::Bytecode(bytecode) => {
                 let body = bytecode
                     .body()
                     .ok_or("Cannot execute non-native method (for script) without body")?;
-                (
-                    body.num_locals,
-                    body.max_stack,
-                    body.max_scope_depth - body.init_scope_depth,
-                )
+
+                body.num_locals
             }
         };
         let mut local_registers = RegisterSet::new(num_locals + 1);
@@ -276,8 +262,6 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             activation_class,
             stack_depth: context.avm2.stack.len(),
             scope_depth: context.avm2.scope_stack.len(),
-            max_stack_size: max_stack as usize,
-            max_scope_size: max_scope as usize,
             context,
         };
 
@@ -450,8 +434,6 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         self.activation_class = activation_class;
         self.stack_depth = self.context.avm2.stack.len();
         self.scope_depth = self.context.avm2.scope_stack.len();
-        self.max_stack_size = body.max_stack as usize;
-        self.max_scope_size = (body.max_scope_depth - body.init_scope_depth) as usize;
 
         // Everything is now setup for the verifier to run
         if method.verified_info.borrow().is_none() {
@@ -556,8 +538,6 @@ impl<'a, 'gc> Activation<'a, 'gc> {
             activation_class: None,
             stack_depth: context.avm2.stack.len(),
             scope_depth: context.avm2.scope_stack.len(),
-            max_stack_size: 0,
-            max_scope_size: 0,
             context,
         }
     }
@@ -649,60 +629,53 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     /// Pushes a value onto the operand stack.
     #[inline]
     pub fn push_stack(&mut self, value: impl Into<Value<'gc>>) {
-        let stack_depth = self.stack_depth;
-        let max_stack_size = self.max_stack_size;
-        self.avm2().push(value.into(), stack_depth, max_stack_size)
+        self.avm2().push(value.into());
     }
 
     /// Pushes a value onto the operand stack, without running some checks.
     #[inline]
     pub fn push_raw(&mut self, value: impl Into<Value<'gc>>) {
-        self.avm2().push_raw(value)
+        self.avm2().push_raw(value.into());
     }
 
     /// Pops a value off the operand stack.
     #[inline]
     #[must_use]
     pub fn pop_stack(&mut self) -> Value<'gc> {
-        let stack_depth = self.stack_depth;
-        self.avm2().pop(stack_depth)
+        self.avm2().pop()
     }
 
     /// Pops multiple values off the operand stack.
     #[inline]
     #[must_use]
     pub fn pop_stack_args(&mut self, arg_count: u32) -> Vec<Value<'gc>> {
-        let stack_depth = self.stack_depth;
-        self.avm2().pop_args(arg_count, stack_depth)
+        self.avm2().pop_args(arg_count)
     }
 
     /// Pushes a scope onto the scope stack.
     #[inline]
     pub fn push_scope(&mut self, scope: Scope<'gc>) {
-        let scope_depth = self.scope_depth;
-        let max_scope_size = self.max_scope_size;
-        self.avm2().push_scope(scope, scope_depth, max_scope_size)
+        self.avm2().push_scope(scope);
     }
 
     /// Pops a scope off of the scope stack.
     #[inline]
     pub fn pop_scope(&mut self) {
-        let scope_depth = self.scope_depth;
-        self.avm2().pop_scope(scope_depth);
+        self.avm2().pop_scope();
     }
 
     /// Clears the operand stack used by this activation.
     #[inline]
     pub fn clear_stack(&mut self) {
         let stack_depth = self.stack_depth;
-        self.avm2().stack.truncate(stack_depth)
+        self.avm2().truncate_stack(stack_depth);
     }
 
     /// Clears the scope stack used by this activation.
     #[inline]
     pub fn clear_scope(&mut self) {
         let scope_depth = self.scope_depth;
-        self.avm2().scope_stack.truncate(scope_depth)
+        self.avm2().scope_stack.truncate(scope_depth);
     }
 
     /// Get the superclass of the class that defined the currently-executing
@@ -787,21 +760,17 @@ impl<'a, 'gc> Activation<'a, 'gc> {
         let verified_info = method.verified_info.borrow();
         let exception_list = &verified_info.as_ref().unwrap().exceptions;
 
-        // Use `coerce_to_object` so that we handle primitives correctly.
-        let err_object = error.coerce_to_object(self);
         let last_ip = self.ip - 1;
         for e in exception_list {
             if last_ip >= e.from_offset as i32 && last_ip < e.to_offset as i32 {
-                let mut matches = false;
-                // A typeless catch block (e.g. `catch(er) { ... }`) will
-                // always match.
-                if e.target_class.is_none() {
-                    matches = true;
-                } else if let Ok(err_object) = err_object {
-                    let target_class = e.target_class.expect("Just confirmed to be non-None");
-
-                    matches = err_object.is_of_type(target_class);
-                }
+                let matches = if let Some(target_class) = e.target_class {
+                    // This ensures null and undefined don't match
+                    error.is_of_type(self, target_class)
+                } else {
+                    // A typeless catch block (i.e. `catch(err:*) { ... }`) will
+                    // always match.
+                    true
+                };
 
                 if matches {
                     #[cfg(feature = "avm_debug")]
@@ -1123,14 +1092,8 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     }
 
     fn op_dup(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        self.push_stack(
-            self.context
-                .avm2
-                .stack
-                .last()
-                .cloned()
-                .unwrap_or(Value::Undefined),
-        );
+        let value = self.avm2().peek(0);
+        self.push_stack(value);
 
         Ok(FrameControl::Continue)
     }
@@ -1751,7 +1714,11 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     }
 
     fn op_get_slot(&mut self, index: u32) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let object = self.pop_stack().coerce_to_object_or_typeerror(self, None)?;
+        let object = self
+            .pop_stack()
+            .null_check(self, None)?
+            .as_object()
+            .expect("Cannot get_slot on primitive");
         let value = object.get_slot(index);
 
         self.push_stack(value);
@@ -1761,7 +1728,11 @@ impl<'a, 'gc> Activation<'a, 'gc> {
 
     fn op_set_slot(&mut self, index: u32) -> Result<FrameControl<'gc>, Error<'gc>> {
         let value = self.pop_stack();
-        let object = self.pop_stack().coerce_to_object_or_typeerror(self, None)?;
+        let object = self
+            .pop_stack()
+            .null_check(self, None)?
+            .as_object()
+            .expect("Cannot set_slot on primitive");
 
         object.set_slot(index, value, self)?;
 
@@ -1770,7 +1741,11 @@ impl<'a, 'gc> Activation<'a, 'gc> {
 
     fn op_set_slot_no_coerce(&mut self, index: u32) -> Result<FrameControl<'gc>, Error<'gc>> {
         let value = self.pop_stack();
-        let object = self.pop_stack().coerce_to_object_or_typeerror(self, None)?;
+        let object = self
+            .pop_stack()
+            .null_check(self, None)?
+            .as_object()
+            .expect("Cannot set_slot on primitive");
 
         object.set_slot_no_coerce(index, value, self.context.gc_context);
 
@@ -2026,16 +2001,18 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     fn op_check_filter(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
         let xml = self.avm2().class_defs().xml;
         let xml_list = self.avm2().class_defs().xml_list;
-        let value = self.pop_stack().coerce_to_object_or_typeerror(self, None)?;
+        let value = self.pop_stack().null_check(self, None)?;
 
-        if value.is_of_type(xml) || value.is_of_type(xml_list) {
+        if value.is_of_type(self, xml) || value.is_of_type(self, xml_list) {
             self.push_stack(value);
         } else {
+            let class_name = value.instance_of_class_name(self);
+
             return Err(Error::AvmError(type_error(
                 self,
                 &format!(
                     "Error #1123: Filter operator not supported on type {}.",
-                    value.instance_of_class_name(self.context.gc_context)
+                    class_name
                 ),
                 1123,
             )?));

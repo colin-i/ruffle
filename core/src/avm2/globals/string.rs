@@ -46,11 +46,10 @@ pub fn instance_init<'gc>(
 
     if let Some(mut value) = this.as_primitive_mut(activation.context.gc_context) {
         if !matches!(*value, Value::String(_)) {
-            *value = args
-                .get(0)
-                .unwrap_or(&Value::String("".into()))
-                .coerce_to_string(activation)?
-                .into();
+            *value = match args.get(0) {
+                Some(arg) => arg.coerce_to_string(activation)?.into(),
+                None => activation.strings().empty().into(),
+            }
         }
     }
 
@@ -92,11 +91,10 @@ pub fn call_handler<'gc>(
     _this: Object<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    Ok(args
-        .get(0)
-        .unwrap_or(&Value::String("".into()))
-        .coerce_to_string(activation)?
-        .into())
+    match args.get(0) {
+        Some(arg) => arg.coerce_to_string(activation).map(Into::into),
+        None => Ok(activation.strings().empty().into()),
+    }
 }
 
 /// Implements `length` property's getter
@@ -105,7 +103,7 @@ fn length<'gc>(
     this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    if let Value::String(s) = this.value_of(activation.context.gc_context)? {
+    if let Value::String(s) = this.value_of(activation.strings())? {
         return Ok(s.len().into());
     }
 
@@ -118,14 +116,14 @@ fn char_at<'gc>(
     this: Object<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    if let Value::String(s) = this.value_of(activation.context.gc_context)? {
+    if let Value::String(s) = this.value_of(activation.strings())? {
         // This function takes Number, so if we use coerce_to_i32 instead of coerce_to_number, the value may overflow.
         let n = args
             .get(0)
             .unwrap_or(&Value::Number(0.0))
             .coerce_to_number(activation)?;
         if n < 0.0 {
-            return Ok("".into());
+            return Ok(activation.strings().empty().into());
         }
 
         let index = if !n.is_nan() { n as usize } else { 0 };
@@ -146,7 +144,7 @@ fn char_code_at<'gc>(
     this: Object<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    if let Value::String(s) = this.value_of(activation.context.gc_context)? {
+    if let Value::String(s) = this.value_of(activation.strings())? {
         // This function takes Number, so if we use coerce_to_i32 instead of coerce_to_number, the value may overflow.
         let n = args
             .get(0)
@@ -212,11 +210,10 @@ fn index_of<'gc>(
         Some(n) => n.coerce_to_i32(activation)?.max(0) as usize,
     };
 
-    return this
-        .slice(start_index..)
+    this.slice(start_index..)
         .and_then(|s| s.find(&pattern))
         .map(|i| Ok((i + start_index).into()))
-        .unwrap_or_else(|| Ok((-1).into())); // Out of range or not found
+        .unwrap_or_else(|| Ok((-1).into())) // Out of range or not found
 }
 
 /// Implements `String.lastIndexOf`
@@ -239,12 +236,11 @@ fn last_index_of<'gc>(
         },
     };
 
-    return this
-        .slice(..start_index)
+    this.slice(..start_index)
         .unwrap_or(&this)
         .rfind(&pattern)
         .map(|i| Ok(i.into()))
-        .unwrap_or_else(|| Ok((-1).into())); // Not found
+        .unwrap_or_else(|| Ok((-1).into())) // Not found
 }
 
 /// Implements String.localeCompare
@@ -275,7 +271,7 @@ fn locale_compare<'gc>(
         return Ok(Value::Integer(1));
     }
 
-    return Ok(Value::Integer(0));
+    Ok(Value::Integer(0))
 }
 
 /// Implements `String.match`
@@ -292,7 +288,9 @@ fn match_s<'gc>(
         let string = pattern.coerce_to_string(activation)?;
         regexp_class.construct(activation, &[Value::String(string)])?
     } else {
-        pattern.coerce_to_object(activation)?
+        pattern
+            .as_object()
+            .expect("Regexp objects must be Value::Object")
     };
 
     if let Some(mut regexp) = pattern.as_regexp_mut(activation.context.gc_context) {
@@ -402,7 +400,9 @@ fn search<'gc>(
         let string = pattern.coerce_to_string(activation)?;
         regexp_class.construct(activation, &[Value::String(string)])?
     } else {
-        pattern.coerce_to_object(activation)?
+        pattern
+            .as_object()
+            .expect("Regexp objects must be Value::Object")
     };
 
     if let Some(mut regexp) = pattern.as_regexp_mut(activation.context.gc_context) {
@@ -452,7 +452,7 @@ fn slice<'gc>(
             .substring(this, start_index..end_index)
             .into())
     } else {
-        Ok("".into())
+        Ok(activation.strings().empty().into())
     }
 }
 
@@ -495,9 +495,9 @@ fn split<'gc>(
             .collect()
     };
 
-    return Ok(ArrayObject::from_storage(activation, storage)
+    Ok(ArrayObject::from_storage(activation, storage)
         .unwrap()
-        .into());
+        .into())
 }
 
 /// Implements `String.substr`
@@ -537,7 +537,7 @@ fn substr<'gc>(
         } else if len <= -1.0 {
             let wrapped_around = this.len() as f64 + len;
             if wrapped_around as usize + start_index >= this.len() {
-                return Ok("".into());
+                return Ok(activation.strings().empty().into());
             };
             wrapped_around
         } else {
@@ -624,7 +624,7 @@ fn to_string<'gc>(
 
     let string_proto = activation.avm2().classes().string.prototype();
     if Object::ptr_eq(string_proto, this) {
-        return Ok("".into());
+        return Ok(activation.strings().empty().into());
     }
 
     Err(make_error_1004(activation, "String.prototype.toString"))
@@ -636,7 +636,7 @@ fn value_of<'gc>(
     this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    this.value_of(activation.context.gc_context)
+    this.value_of(activation.strings())
 }
 
 /// Implements `String.toUpperCase`

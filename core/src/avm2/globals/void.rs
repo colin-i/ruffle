@@ -1,5 +1,5 @@
 use crate::avm2::activation::Activation;
-use crate::avm2::class::Class;
+use crate::avm2::class::{Class, ClassAttributes};
 use crate::avm2::method::Method;
 use crate::avm2::object::Object;
 use crate::avm2::value::Value;
@@ -22,6 +22,7 @@ pub fn create_class<'gc>(activation: &mut Activation<'_, 'gc>) -> Class<'gc> {
         Method::from_builtin(void_init, "", mc),
         mc,
     );
+    class.set_attributes(mc, ClassAttributes::FINAL | ClassAttributes::SEALED);
 
     class.mark_traits_loaded(activation.context.gc_context);
 

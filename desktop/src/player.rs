@@ -3,6 +3,7 @@ use crate::backends::{
     DesktopUiBackend,
 };
 use crate::cli::FilesystemAccessMode;
+use crate::cli::GameModePreference;
 use crate::custom_event::RuffleEvent;
 use crate::gui::{FilePicker, MovieView};
 use crate::preferences::GlobalPreferences;
@@ -23,6 +24,7 @@ use ruffle_frontend_utils::recents::Recent;
 use ruffle_render::backend::RenderBackend;
 use ruffle_render::quality::StageQuality;
 use ruffle_render_wgpu::backend::WgpuRenderBackend;
+use ruffle_render_wgpu::clap::PowerPreference;
 use ruffle_render_wgpu::descriptors::Descriptors;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -123,6 +125,9 @@ impl PollRequester for WinitWaker {
 struct ActivePlayer {
     player: Arc<Mutex<Player>>,
     executor: Arc<AsyncExecutor<WinitWaker>>,
+
+    #[cfg(target_os = "linux")]
+    _gamemode_session: crate::dbus::GameModeSession,
 }
 
 impl ActivePlayer {
@@ -262,6 +267,20 @@ impl ActivePlayer {
             }
         }
 
+        #[cfg_attr(not(target_os = "linux"), allow(unused))]
+        let gamemode_enable = match preferences.gamemode_preference() {
+            GameModePreference::Default => {
+                preferences.graphics_power_preference() == PowerPreference::High
+            }
+            GameModePreference::On => {
+                if cfg!(not(target_os = "linux")) {
+                    tracing::warn!("Cannot enable GameMode, as it is supported only on Linux");
+                }
+                true
+            }
+            GameModePreference::Off => false,
+        };
+
         let renderer = WgpuRenderBackend::new(descriptors, movie_view)
             .map_err(|e| anyhow!(e.to_string()))
             .expect("Couldn't create wgpu rendering backend");
@@ -399,7 +418,12 @@ impl ActivePlayer {
             });
         }
 
-        Self { player, executor }
+        Self {
+            player,
+            executor,
+            #[cfg(target_os = "linux")]
+            _gamemode_session: crate::dbus::GameModeSession::new(gamemode_enable),
+        }
     }
 }
 
