@@ -2208,7 +2208,7 @@ impl<'gc> MovieClip<'gc> {
         if let Avm2Value::Object(object) = self.object2() {
             let mut constr_thing = || {
                 let mut activation = Avm2Activation::from_nothing(context);
-                class_object.call_super_init(object.into(), &[], &mut activation)?;
+                class_object.call_init(object.into(), &[], &mut activation)?;
 
                 Ok(())
             };
@@ -2373,7 +2373,7 @@ impl<'gc> MovieClip<'gc> {
                 .intersects(ClipEvent::BUTTON_EVENT_FLAGS)
         {
             true
-        } else if self.is_root() {
+        } else if self.avm1_parent().is_none() {
             false
         } else {
             let object = self.object();

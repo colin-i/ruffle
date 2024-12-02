@@ -112,6 +112,7 @@ pub struct SystemClasses<'gc> {
     pub transform: ClassObject<'gc>,
     pub colortransform: ClassObject<'gc>,
     pub matrix: ClassObject<'gc>,
+    pub matrix3d: ClassObject<'gc>,
     pub illegaloperationerror: ClassObject<'gc>,
     pub eventdispatcher: ClassObject<'gc>,
     pub rectangle: ClassObject<'gc>,
@@ -270,6 +271,7 @@ impl<'gc> SystemClasses<'gc> {
             transform: object,
             colortransform: object,
             matrix: object,
+            matrix3d: object,
             illegaloperationerror: object,
             eventdispatcher: object,
             rectangle: object,
@@ -797,6 +799,12 @@ mod native {
     include!(concat!(env!("OUT_DIR"), "/native_table.rs"));
 }
 
+// Allow accessing slots that are meant to be accessed natively by using
+// avm2::globals::slots::*;
+pub mod slots {
+    pub use super::native::slots::*;
+}
+
 // This acts the same way as 'avm2_system_class', but for classes
 // declared in 'playerglobal'. Classes are declared as ("package", "class", field_name),
 // and are stored in 'avm2().system_classes'
@@ -920,6 +928,7 @@ pub fn init_native_system_classes(activation: &mut Activation<'_, '_>) {
             ("flash.events", "ContextMenuEvent", contextmenuevent),
             ("flash.events", "FocusEvent", focusevent),
             ("flash.geom", "Matrix", matrix),
+            ("flash.geom", "Matrix3D", matrix3d),
             ("flash.geom", "Point", point),
             ("flash.geom", "Rectangle", rectangle),
             ("flash.geom", "Transform", transform),
@@ -1000,8 +1009,8 @@ fn load_playerglobal<'gc>(
 ) -> Result<(), Error<'gc>> {
     activation.avm2().native_method_table = native::NATIVE_METHOD_TABLE;
     activation.avm2().native_instance_allocator_table = native::NATIVE_INSTANCE_ALLOCATOR_TABLE;
-    activation.avm2().native_super_initializer_table = native::NATIVE_SUPER_INITIALIZER_TABLE;
     activation.avm2().native_call_handler_table = native::NATIVE_CALL_HANDLER_TABLE;
+    activation.avm2().native_custom_constructor_table = native::NATIVE_CUSTOM_CONSTRUCTOR_TABLE;
 
     let movie = Arc::new(
         SwfMovie::from_data(PLAYERGLOBAL, "file:///".into(), None)
