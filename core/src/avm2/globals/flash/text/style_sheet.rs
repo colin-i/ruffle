@@ -1,36 +1,31 @@
+use crate::avm2::object::{ScriptObject, TObject};
 use crate::avm2::parameters::ParametersExt;
-use crate::avm2::{Activation, Error, Object, TObject, Value};
+use crate::avm2::{Activation, Error, Value};
 use crate::html::{transform_dashes_to_camel_case, CssStream};
 use crate::string::AvmString;
 use ruffle_wstr::{WStr, WString};
 
 pub fn inner_parse_css<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let document = args.get_string(activation, 0)?;
-    let result = activation
-        .avm2()
-        .classes()
-        .object
-        .construct(activation, &[])?;
+    let result = ScriptObject::new_object(activation);
 
     if let Ok(css) = CssStream::new(&document).parse() {
         for (selector, properties) in css.into_iter() {
-            let object = activation
-                .avm2()
-                .classes()
-                .object
-                .construct(activation, &[])?;
+            let object = ScriptObject::new_object(activation);
+
             for (key, value) in properties.into_iter() {
-                object.set_public_property(
+                object.set_string_property_local(
                     AvmString::new(activation.gc(), transform_dashes_to_camel_case(key)),
                     Value::String(AvmString::new(activation.gc(), value)),
                     activation,
                 )?;
             }
-            result.set_public_property(
+
+            result.set_string_property_local(
                 AvmString::new(activation.gc(), selector),
                 Value::Object(object),
                 activation,
@@ -43,7 +38,7 @@ pub fn inner_parse_css<'gc>(
 
 pub fn inner_parse_color<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let input = args.get_string(activation, 0)?;
@@ -61,7 +56,7 @@ pub fn inner_parse_color<'gc>(
 
 pub fn inner_parse_font_family<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let input = args.get_string(activation, 0)?;

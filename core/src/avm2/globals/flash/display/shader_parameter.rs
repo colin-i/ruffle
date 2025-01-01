@@ -1,4 +1,5 @@
-use crate::avm2::globals::slots::*;
+use crate::avm2::globals::slots::flash_display_shader_input as input_slots;
+use crate::avm2::globals::slots::flash_display_shader_parameter as parameter_slots;
 use ruffle_render::pixel_bender::PixelBenderParam;
 
 use crate::{
@@ -23,31 +24,22 @@ pub fn make_shader_parameter<'gc>(
                 .classes()
                 .shaderparameter
                 .construct(activation, &[])?;
-            let type_name =
-                AvmString::new_utf8(activation.context.gc_context, param_type.to_string());
+            let type_name = AvmString::new_utf8(activation.gc(), param_type.to_string());
 
-            obj.set_slot(
-                FLASH_DISPLAY_SHADER_PARAMETER__INDEX_SLOT,
-                index.into(),
-                activation,
-            )?;
-            obj.set_slot(
-                FLASH_DISPLAY_SHADER_PARAMETER__TYPE_SLOT,
-                type_name.into(),
-                activation,
-            )?;
+            obj.set_slot(parameter_slots::_INDEX, index.into(), activation)?;
+            obj.set_slot(parameter_slots::_TYPE, type_name.into(), activation)?;
             for meta in metadata {
-                let name = AvmString::new_utf8(activation.context.gc_context, &meta.key);
+                let name = AvmString::new_utf8(activation.gc(), &meta.key);
                 let value = meta.value.clone().as_avm2_value(activation, false)?;
                 obj.set_public_property(name, value, activation)?;
 
                 if &*name == b"defaultValue" {
-                    obj.set_public_property("value", value, activation)?;
+                    obj.set_slot(parameter_slots::_VALUE, value, activation)?;
                 }
             }
-            obj.set_public_property(
+            obj.set_string_property_local(
                 "name",
-                AvmString::new_utf8(activation.context.gc_context, name).into(),
+                AvmString::new_utf8(activation.gc(), name).into(),
                 activation,
             )?;
             Ok(obj.into())
@@ -58,19 +50,11 @@ pub fn make_shader_parameter<'gc>(
                 .classes()
                 .shaderinput
                 .construct(activation, &[])?;
-            obj.set_slot(
-                FLASH_DISPLAY_SHADER_INPUT__CHANNELS_SLOT,
-                (*channels).into(),
-                activation,
-            )?;
-            obj.set_slot(
-                FLASH_DISPLAY_SHADER_INPUT__INDEX_SLOT,
-                index.into(),
-                activation,
-            )?;
-            obj.set_public_property(
+            obj.set_slot(input_slots::_CHANNELS, (*channels).into(), activation)?;
+            obj.set_slot(input_slots::_INDEX, index.into(), activation)?;
+            obj.set_string_property_local(
                 "name",
-                AvmString::new_utf8(activation.context.gc_context, name).into(),
+                AvmString::new_utf8(activation.gc(), name).into(),
                 activation,
             )?;
             Ok(obj.into())

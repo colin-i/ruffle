@@ -2,10 +2,10 @@
 
 use crate::avm2::activation::Activation;
 use crate::avm2::error::make_error_2007;
+use crate::avm2::globals::slots::flash_events_event_dispatcher as slots;
 use crate::avm2::object::{Object, TObject};
 use crate::avm2::value::Value;
 use crate::avm2::Error;
-use crate::avm2::Multiname;
 use crate::display_object::TDisplayObject;
 use crate::string::AvmString;
 use fnv::FnvHashMap;
@@ -383,10 +383,7 @@ fn dispatch_event_to_target<'gc>(
         event.as_event().unwrap().event_type(),
     );
 
-    let internal_ns = activation.avm2().namespaces.flash_events_internal;
-    let dispatch_list = dispatcher
-        .get_property(&Multiname::new(internal_ns, "_dispatchList"), activation)?
-        .as_object();
+    let dispatch_list = dispatcher.get_slot(slots::DISPATCH_LIST).as_object();
 
     if dispatch_list.is_none() {
         // Objects with no dispatch list act as if they had an empty one
@@ -395,12 +392,12 @@ fn dispatch_event_to_target<'gc>(
 
     let dispatch_list = dispatch_list.unwrap();
 
-    let mut evtmut = event.as_event_mut(activation.context.gc_context).unwrap();
+    let mut evtmut = event.as_event_mut(activation.gc()).unwrap();
     let name = evtmut.event_type();
     let use_capture = evtmut.phase() == EventPhase::Capturing;
 
     let handlers: Vec<Object<'gc>> = dispatch_list
-        .as_dispatch_mut(activation.context.gc_context)
+        .as_dispatch_mut(activation.gc())
         .expect("Internal dispatch list is missing during dispatch!")
         .iter_event_handlers(name, use_capture)
         .collect();
@@ -447,11 +444,7 @@ pub fn dispatch_event<'gc>(
     event: Object<'gc>,
     simulate_dispatch: bool,
 ) -> Result<bool, Error<'gc>> {
-    let internal_ns = activation.avm2().namespaces.flash_events_internal;
-    let target = this
-        .get_property(&Multiname::new(internal_ns, "_target"), activation)?
-        .as_object()
-        .unwrap_or(this);
+    let target = this.get_slot(slots::TARGET).as_object().unwrap_or(this);
 
     let mut ancestor_list = Vec::new();
     // Edge case - during button construction, we fire bubbling events for objects
@@ -477,7 +470,7 @@ pub fn dispatch_event<'gc>(
         event
     };
 
-    let mut evtmut = event.as_event_mut(activation.context.gc_context).unwrap();
+    let mut evtmut = event.as_event_mut(activation.gc()).unwrap();
 
     evtmut.set_phase(EventPhase::Capturing);
     evtmut.set_target(target);
@@ -493,7 +486,7 @@ pub fn dispatch_event<'gc>(
     }
 
     event
-        .as_event_mut(activation.context.gc_context)
+        .as_event_mut(activation.gc())
         .unwrap()
         .set_phase(EventPhase::AtTarget);
 
@@ -502,7 +495,7 @@ pub fn dispatch_event<'gc>(
     }
 
     event
-        .as_event_mut(activation.context.gc_context)
+        .as_event_mut(activation.gc())
         .unwrap()
         .set_phase(EventPhase::Bubbling);
 

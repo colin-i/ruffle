@@ -3,9 +3,7 @@ use ruffle_render::pixel_bender::{
 };
 
 use crate::{
-    avm2::{
-        parameters::ParametersExt, string::AvmString, Activation, Error, Object, TObject, Value,
-    },
+    avm2::{parameters::ParametersExt, string::AvmString, Activation, Error, TObject, Value},
     pixel_bender::PixelBenderTypeExt,
 };
 
@@ -16,23 +14,25 @@ pub use crate::avm2::object::shader_data_allocator;
 /// Implements `ShaderData.init`, which is called from the constructor
 pub fn init<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     let bytecode = args.get_object(activation, 0, "bytecode")?;
     let bytecode = bytecode.as_bytearray().unwrap();
     let shader = parse_shader(bytecode.bytes()).expect("Failed to parse PixelBender");
 
     for meta in &shader.metadata {
-        let name = AvmString::new_utf8(activation.context.gc_context, &meta.key);
+        let name = AvmString::new_utf8(activation.gc(), &meta.key);
         // Top-level metadata appears to turn `TInt` into a plain integer value,
         // rather than a single-element array.
         let value = meta.value.as_avm2_value(activation, true)?;
-        this.set_public_property(name, value, activation)?;
+        this.set_string_property_local(name, value, activation)?;
     }
-    this.set_public_property(
+    this.set_string_property_local(
         "name",
-        AvmString::new_utf8(activation.context.gc_context, &shader.name).into(),
+        AvmString::new_utf8(activation.gc(), &shader.name).into(),
         activation,
     )?;
 
@@ -60,9 +60,9 @@ pub fn init<'gc>(
             }
         };
 
-        let name = AvmString::new_utf8(activation.context.gc_context, name);
+        let name = AvmString::new_utf8(activation.gc(), name);
         let param_obj = make_shader_parameter(activation, param, index)?;
-        this.set_public_property(name, param_obj, activation)?;
+        this.set_string_property_local(name, param_obj, activation)?;
     }
 
     let shader_handle = activation

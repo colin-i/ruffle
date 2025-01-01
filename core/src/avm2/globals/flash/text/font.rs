@@ -2,7 +2,7 @@
 
 use crate::avm2::activation::Activation;
 use crate::avm2::error::make_error_1508;
-use crate::avm2::object::{FontObject, Object, TObject};
+use crate::avm2::object::{FontObject, TObject};
 use crate::avm2::parameters::ParametersExt;
 use crate::avm2::value::Value;
 use crate::avm2::{ArrayObject, ArrayStorage, Error};
@@ -16,13 +16,13 @@ use crate::font::FontType;
 /// Implements `Font.fontName`
 pub fn get_font_name<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(font) = this.as_font() {
-        return Ok(
-            AvmString::new_utf8(activation.context.gc_context, font.descriptor().name()).into(),
-        );
+        return Ok(AvmString::new_utf8(activation.gc(), font.descriptor().name()).into());
     }
 
     Ok(Value::Null)
@@ -31,9 +31,11 @@ pub fn get_font_name<'gc>(
 /// Implements `Font.fontStyle`
 pub fn get_font_style<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(font) = this.as_font() {
         return match (font.descriptor().bold(), font.descriptor().italic()) {
             (false, false) => Ok("regular".into()),
@@ -49,9 +51,11 @@ pub fn get_font_style<'gc>(
 /// Implements `Font.fontType`
 pub fn get_font_type<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(font) = this.as_font() {
         return Ok(match font.font_type() {
             FontType::Embedded => "embedded",
@@ -67,9 +71,11 @@ pub fn get_font_type<'gc>(
 /// Implements `Font.hasGlyphs`
 pub fn has_glyphs<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(font) = this.as_font() {
         let my_str = args.get_string(activation, 0)?;
         return Ok(font.has_glyphs_for_str(&my_str).into());
@@ -81,7 +87,7 @@ pub fn has_glyphs<'gc>(
 /// `Font.enumerateFonts`
 pub fn enumerate_fonts<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let mut storage = ArrayStorage::new(0);
@@ -98,7 +104,7 @@ pub fn enumerate_fonts<'gc>(
     }
 
     for font in activation.context.library.global_fonts() {
-        storage.push(FontObject::for_font(activation.context.gc_context, font_class, font).into());
+        storage.push(FontObject::for_font(activation.gc(), font_class, font).into());
     }
 
     if let Some(library) = activation
@@ -110,20 +116,18 @@ pub fn enumerate_fonts<'gc>(
             // TODO: EmbeddedCFF isn't supposed to show until it's been used (some kind of internal initialization method?)
             // Device is only supposed to show when arg0 is true - but that's supposed to be "all known" device fonts, not just loaded ones
             if font.font_type() == FontType::Embedded {
-                storage.push(
-                    FontObject::for_font(activation.context.gc_context, font_class, font).into(),
-                );
+                storage.push(FontObject::for_font(activation.gc(), font_class, font).into());
             }
         }
     }
 
-    Ok(ArrayObject::from_storage(activation, storage)?.into())
+    Ok(ArrayObject::from_storage(activation, storage).into())
 }
 
 /// `Font.registerFont`
 pub fn register_font<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let object = args.get_object(activation, 0, "font")?;

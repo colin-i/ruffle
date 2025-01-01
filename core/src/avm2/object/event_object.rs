@@ -24,7 +24,7 @@ pub fn event_allocator<'gc>(
     let base = ScriptObjectData::new(class);
 
     Ok(EventObject(Gc::new(
-        activation.context.gc_context,
+        activation.gc(),
         EventObjectData {
             base,
             event: RefLock::new(Event::new(activation.strings().empty())),
@@ -88,7 +88,7 @@ impl<'gc> EventObject<'gc> {
         event.set_cancelable(cancelable);
 
         let event_object = EventObject(Gc::new(
-            context.gc_context,
+            context.gc(),
             EventObjectData {
                 base,
                 event: RefLock::new(event),
@@ -259,7 +259,7 @@ impl<'gc> EventObject<'gc> {
             .unwrap();
         for (key, value) in info {
             info_object
-                .set_public_property(key.into(), Value::String(value.into()), activation)
+                .set_string_property_local(key.into(), Value::String(value.into()), activation)
                 .unwrap();
         }
 

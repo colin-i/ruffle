@@ -24,7 +24,7 @@ pub fn class_allocator<'gc>(
 /// This can only be called by subclasses (if at all), so in practice it's a noop.
 pub fn instance_init<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     Ok(Value::Undefined)
@@ -33,7 +33,7 @@ pub fn instance_init<'gc>(
 /// Implement's `Class`'s class initializer.
 pub fn class_init<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     Ok(Value::Undefined)
@@ -41,9 +41,11 @@ pub fn class_init<'gc>(
 
 fn prototype<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(class) = this.as_class_object() {
         return Ok(class.prototype().into());
     }
@@ -82,7 +84,7 @@ pub fn create_i_class<'gc>(
         PUBLIC_INSTANCE_PROPERTIES,
     );
 
-    class_i_class.mark_traits_loaded(activation.context.gc_context);
+    class_i_class.mark_traits_loaded(activation.gc());
     class_i_class
         .init_vtable(activation.context)
         .expect("Native class's vtable should initialize");
@@ -115,7 +117,7 @@ pub fn create_c_class<'gc>(
         activation,
     );
 
-    class_c_class.mark_traits_loaded(activation.context.gc_context);
+    class_c_class.mark_traits_loaded(activation.gc());
     class_c_class
         .init_vtable(activation.context)
         .expect("Native class's vtable should initialize");

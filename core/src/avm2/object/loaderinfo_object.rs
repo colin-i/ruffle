@@ -2,10 +2,8 @@
 
 use crate::avm2::activation::Activation;
 use crate::avm2::object::script_object::ScriptObjectData;
-use crate::avm2::object::{Object, ObjectPtr, StageObject, TObject};
-use crate::avm2::Avm2;
-use crate::avm2::Error;
-use crate::avm2::EventObject;
+use crate::avm2::object::{EventObject, Object, ObjectPtr, StageObject, TObject};
+use crate::avm2::{Avm2, Error, Value};
 use crate::context::UpdateContext;
 use crate::display_object::{DisplayObject, TDisplayObject};
 use crate::loader::ContentType;
@@ -124,7 +122,7 @@ impl<'gc> LoaderInfoObject<'gc> {
         let loaded_stream = LoaderStream::Swf(movie, root);
 
         let this: Object<'gc> = LoaderInfoObject(Gc::new(
-            activation.context.gc_context,
+            activation.gc(),
             LoaderInfoObjectData {
                 base,
                 loaded_stream: RefLock::new(loaded_stream),
@@ -171,7 +169,7 @@ impl<'gc> LoaderInfoObject<'gc> {
         let base = ScriptObjectData::new(class);
 
         let this: Object<'gc> = LoaderInfoObject(Gc::new(
-            activation.context.gc_context,
+            activation.gc(),
             LoaderInfoObjectData {
                 base,
                 loaded_stream: RefLock::new(LoaderStream::NotYetLoaded(movie, root_clip, is_stage)),
@@ -349,7 +347,7 @@ impl<'gc> LoaderInfoObject<'gc> {
                 .expect("Native init should succeed");
 
             unlock!(
-                Gc::write(activation.context.gc_context, self.0),
+                Gc::write(activation.gc(), self.0),
                 LoaderInfoObjectData,
                 cached_avm1movie
             )
@@ -363,7 +361,7 @@ impl<'gc> LoaderInfoObject<'gc> {
         // Reset properties
         let empty_swf = Arc::new(SwfMovie::empty(activation.context.swf.version()));
         let loader_stream = LoaderStream::NotYetLoaded(empty_swf, None, false);
-        self.set_loader_stream(loader_stream, activation.context.gc_context);
+        self.set_loader_stream(loader_stream, activation.gc());
         self.set_errored(false);
         self.reset_init_and_complete_events();
 
@@ -376,7 +374,7 @@ impl<'gc> LoaderInfoObject<'gc> {
         // error if the loader hadn't loaded it.
         let _ = crate::avm2::globals::flash::display::display_object_container::remove_child_at(
             activation,
-            loader,
+            Value::Object(loader),
             &[0.into()],
         );
     }

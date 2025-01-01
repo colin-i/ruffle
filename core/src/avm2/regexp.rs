@@ -237,9 +237,7 @@ impl<'gc> RegExp<'gc> {
             let args = std::iter::once(Some(&m.range))
                 .chain((m.captures.iter()).map(|x| x.as_ref()))
                 .map(|o| match o {
-                    Some(r) => {
-                        AvmString::new(activation.context.gc_context, &txt[r.start..r.end]).into()
-                    }
+                    Some(r) => AvmString::new(activation.gc(), &txt[r.start..r.end]).into(),
                     None => activation.strings().empty().into(),
                 })
                 .chain(std::iter::once(m.range.start.into()))
@@ -326,7 +324,7 @@ impl<'gc> RegExp<'gc> {
         }
 
         ret.push_str(&text[start..]);
-        Ok(AvmString::new(activation.context.gc_context, ret))
+        Ok(AvmString::new(activation.gc(), ret))
     }
 
     pub fn split(
@@ -340,11 +338,9 @@ impl<'gc> RegExp<'gc> {
         if self.source.is_empty() {
             let mut it = text.chars().take(limit);
             while let Some(Ok(c)) = it.next() {
-                storage.push(
-                    AvmString::new(activation.context.gc_context, WString::from_char(c)).into(),
-                );
+                storage.push(AvmString::new(activation.gc(), WString::from_char(c)).into());
             }
-            return ArrayObject::from_storage(activation, storage);
+            return Ok(ArrayObject::from_storage(activation, storage));
         }
 
         let mut start = 0;
@@ -352,16 +348,12 @@ impl<'gc> RegExp<'gc> {
             if m.range.end == start {
                 break;
             }
-            storage.push(
-                AvmString::new(activation.context.gc_context, &text[start..m.range.start]).into(),
-            );
+            storage.push(AvmString::new(activation.gc(), &text[start..m.range.start]).into());
             if storage.length() >= limit {
                 break;
             }
             for c in m.captures.iter().filter_map(Option::as_ref) {
-                storage.push(
-                    AvmString::new(activation.context.gc_context, &text[c.start..c.end]).into(),
-                );
+                storage.push(AvmString::new(activation.gc(), &text[c.start..c.end]).into());
                 if storage.length() >= limit {
                     break; // Intentional bug to match Flash.
                            // Causes adding parts past limit.
@@ -370,10 +362,12 @@ impl<'gc> RegExp<'gc> {
 
             start = m.range.end;
         }
+
         if storage.length() < limit {
-            storage.push(AvmString::new(activation.context.gc_context, &text[start..]).into());
+            storage.push(AvmString::new(activation.gc(), &text[start..]).into());
         }
-        ArrayObject::from_storage(activation, storage)
+
+        Ok(ArrayObject::from_storage(activation, storage))
     }
 
     pub fn find_utf16_match(

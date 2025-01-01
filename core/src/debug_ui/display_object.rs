@@ -205,7 +205,7 @@ impl DisplayObjectWindow {
                     let mut enabled = object.mouse_enabled();
                     Checkbox::new(&mut enabled, "Enabled").ui(ui);
                     if enabled != object.mouse_enabled() {
-                        object.set_mouse_enabled(context.gc_context, enabled);
+                        object.set_mouse_enabled(context.gc(), enabled);
                     }
                 });
                 ui.end_row();
@@ -215,7 +215,7 @@ impl DisplayObjectWindow {
                     let mut enabled = object.double_click_enabled();
                     Checkbox::new(&mut enabled, "Enabled").ui(ui);
                     if enabled != object.double_click_enabled() {
-                        object.set_double_click_enabled(context.gc_context, enabled);
+                        object.set_double_click_enabled(context.gc(), enabled);
                     }
                 });
                 ui.end_row();
@@ -986,13 +986,13 @@ impl DisplayObjectWindow {
                         let mut enabled = object.is_bitmap_cached_preference();
                         Checkbox::new(&mut enabled, "Enabled").ui(ui);
                         if enabled != object.is_bitmap_cached_preference() {
-                            object.set_bitmap_cached_preference(context.gc_context, enabled);
+                            object.set_bitmap_cached_preference(context.gc(), enabled);
                         }
                     } else {
                         ui.label("Forced due to filters");
                     }
                     if ui.button("Invalidate").clicked() {
-                        object.invalidate_cached_bitmap(context.gc_context);
+                        object.invalidate_cached_bitmap(context.gc());
                     }
                 });
                 ui.end_row();
@@ -1025,7 +1025,7 @@ impl DisplayObjectWindow {
                     });
                 ui.end_row();
                 if new_blend != old_blend {
-                    object.set_blend_mode(context.gc_context, new_blend);
+                    object.set_blend_mode(context.gc(), new_blend);
                 }
 
                 let color_transform = *object.base().color_transform();
@@ -1039,7 +1039,7 @@ impl DisplayObjectWindow {
                         let mut enabled = obj.raw_container().mouse_children();
                         Checkbox::new(&mut enabled, "Enabled").ui(ui);
                         if enabled != obj.raw_container().mouse_children() {
-                            obj.raw_container_mut(context.gc_context)
+                            obj.raw_container_mut(context.gc())
                                 .set_mouse_children(enabled);
                         }
                     });
@@ -1143,14 +1143,6 @@ impl DisplayObjectWindow {
                 ui.label(object.clip_depth().to_string());
                 ui.end_row();
 
-                ui.label("World Bounds");
-                bounds_label(ui, object.world_bounds(), &mut self.hovered_bounds);
-                ui.end_row();
-
-                ui.label("Local Bounds");
-                bounds_label(ui, object.local_bounds(), &mut None);
-                ui.end_row();
-
                 ui.label("Self Bounds");
                 bounds_label(ui, object.self_bounds(), &mut None);
                 ui.end_row();
@@ -1162,20 +1154,54 @@ impl DisplayObjectWindow {
                     ui.label("None");
                 }
                 ui.end_row();
+            });
 
-                let matrix = *object.base().matrix();
-                ui.label("Local Position");
+        self.show_matrix_properties(
+            ui,
+            "World Matrix",
+            object,
+            &object.local_to_global_matrix(),
+            true,
+        );
+        self.show_matrix_properties(ui, "Local Matrix", object, object.base().matrix(), false);
+    }
+
+    fn show_matrix_properties(
+        &mut self,
+        ui: &mut Ui,
+        name: &str,
+        object: DisplayObject<'_>,
+        matrix: &ruffle_render::matrix::Matrix,
+        hoverable_bounds: bool,
+    ) {
+        ui.collapsing(name, |ui| {
+            Grid::new(ui.id().with(name)).num_columns(2).show(ui, |ui| {
+                ui.label("Bounds");
+                let no_hover = &mut None;
+                bounds_label(
+                    ui,
+                    object.bounds_with_transform(matrix),
+                    if hoverable_bounds {
+                        &mut self.hovered_bounds
+                    } else {
+                        no_hover
+                    },
+                );
+                ui.end_row();
+
+                ui.label("Position");
                 ui.label(format!("{:.2}, {:.2}", matrix.tx, matrix.ty));
                 ui.end_row();
 
-                ui.label("Local Rotation");
+                ui.label("Rotation");
                 ui.label(format!("{}, {}", matrix.b, matrix.c));
                 ui.end_row();
 
-                ui.label("Local Scale");
+                ui.label("Scale");
                 ui.label(format!("{}, {}", matrix.a, matrix.d));
                 ui.end_row();
             });
+        });
     }
 
     pub fn show_children<'gc>(

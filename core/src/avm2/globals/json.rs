@@ -4,7 +4,7 @@ use crate::avm2::activation::Activation;
 use crate::avm2::array::ArrayStorage;
 use crate::avm2::error::{syntax_error, type_error};
 use crate::avm2::globals::array::ArrayIter;
-use crate::avm2::object::{ArrayObject, FunctionObject, Object, TObject};
+use crate::avm2::object::{ArrayObject, FunctionObject, Object, ScriptObject, TObject};
 use crate::avm2::parameters::ParametersExt;
 use crate::avm2::value::Value;
 use crate::avm2::Error;
@@ -22,7 +22,7 @@ fn deserialize_json_inner<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     Ok(match json {
         JsonValue::Null => Value::Null,
-        JsonValue::String(s) => AvmString::new_utf8(activation.context.gc_context, s).into(),
+        JsonValue::String(s) => AvmString::new_utf8(activation.gc(), s).into(),
         JsonValue::Bool(b) => b.into(),
         JsonValue::Number(number) => {
             let number = number.as_f64().unwrap();
@@ -33,19 +33,18 @@ fn deserialize_json_inner<'gc>(
             }
         }
         JsonValue::Object(js_obj) => {
-            let obj_class = activation.avm2().classes().object;
-            let obj = obj_class.construct(activation, &[])?;
+            let obj = ScriptObject::new_object(activation);
             for entry in js_obj.iter() {
-                let key = AvmString::new_utf8(activation.context.gc_context, entry.0);
+                let key = AvmString::new_utf8(activation.gc(), entry.0);
                 let val = deserialize_json_inner(activation, entry.1.clone(), reviver)?;
                 let mapped_val = match reviver {
                     None => val,
                     Some(reviver) => reviver.call(activation, Value::Null, &[key.into(), val])?,
                 };
                 if matches!(mapped_val, Value::Undefined) {
-                    obj.delete_public_property(activation, key)?;
+                    obj.delete_string_property_local(key, activation)?;
                 } else {
-                    obj.set_public_property(key, mapped_val, activation)?;
+                    obj.set_string_property_local(key, mapped_val, activation)?;
                 }
             }
             obj.into()
@@ -61,7 +60,7 @@ fn deserialize_json_inner<'gc>(
                 arr.push(Some(mapped_val));
             }
             let storage = ArrayStorage::from_storage(arr);
-            let array = ArrayObject::from_storage(activation, storage)?;
+            let array = ArrayObject::from_storage(activation, storage);
             array.into()
         }
     })
@@ -176,7 +175,7 @@ impl<'gc> AvmSerializer<'gc> {
             }
             for i in 1.. {
                 match obj.get_enumerant_name(i, activation)? {
-                    Value::Undefined => break,
+                    Value::Null => break,
                     name_val => {
                         let name = name_val.coerce_to_string(activation)?;
                         let value = obj.get_public_property(name, activation)?;
@@ -205,7 +204,7 @@ impl<'gc> AvmSerializer<'gc> {
         let mut iter = ArrayIter::new(activation, iterable)?;
         while let Some(r) = iter.next(activation) {
             let (i, item) = r?;
-            let mc = activation.context.gc_context;
+            let mc = activation.gc();
             let mapped =
                 self.map_value(activation, || AvmString::new_utf8(mc, i.to_string()), item)?;
             js_arr.push(self.serialize_value(activation, mapped)?);
@@ -267,7 +266,7 @@ impl<'gc> AvmSerializer<'gc> {
 /// Implements `JSON.parse`.
 pub fn parse<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let input = args.get_string(activation, 0)?;
@@ -291,7 +290,7 @@ pub fn parse<'gc>(
 /// Implements `JSON.stringify`.
 pub fn stringify<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let val = args.get_value(0);
@@ -358,5 +357,5 @@ pub fn stringify<'gc>(
         }
         None => serde_json::to_vec(&json).expect("JSON serialization cannot fail"),
     };
-    Ok(AvmString::new_utf8_bytes(activation.context.gc_context, &result).into())
+    Ok(AvmString::new_utf8_bytes(activation.gc(), &result).into())
 }

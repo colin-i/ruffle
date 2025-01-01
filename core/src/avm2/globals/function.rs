@@ -5,7 +5,7 @@ use crate::avm2::class::{Class, ClassAttributes};
 use crate::avm2::error::eval_error;
 use crate::avm2::globals::array::resolve_array_hole;
 use crate::avm2::method::{Method, NativeMethodImpl};
-use crate::avm2::object::{function_allocator, FunctionObject, Object, TObject};
+use crate::avm2::object::{function_allocator, FunctionObject, TObject};
 use crate::avm2::value::Value;
 use crate::avm2::Error;
 use crate::avm2::QName;
@@ -13,9 +13,11 @@ use crate::avm2::QName;
 /// Implements `Function`'s instance initializer.
 pub fn instance_init<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if !args.is_empty() {
         return Err(Error::AvmError(eval_error(
             activation,
@@ -31,7 +33,7 @@ pub fn instance_init<'gc>(
 
 pub fn class_call<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     Ok(activation
@@ -45,9 +47,11 @@ pub fn class_call<'gc>(
 /// Implements `Function`'s class initializer.
 pub fn class_init<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     let scope = activation.create_scopechain();
     let this_class = this.as_class_object().unwrap();
     let function_proto = this_class.prototype();
@@ -56,7 +60,7 @@ pub fn class_init<'gc>(
         "call",
         FunctionObject::from_method(
             activation,
-            Method::from_builtin(call, "call", activation.context.gc_context),
+            Method::from_builtin(call, "call", activation.gc()),
             scope,
             None,
             None,
@@ -69,7 +73,7 @@ pub fn class_init<'gc>(
         "apply",
         FunctionObject::from_method(
             activation,
-            Method::from_builtin(apply, "apply", activation.context.gc_context),
+            Method::from_builtin(apply, "apply", activation.gc()),
             scope,
             None,
             None,
@@ -82,7 +86,7 @@ pub fn class_init<'gc>(
         "toString",
         FunctionObject::from_method(
             activation,
-            Method::from_builtin(to_string, "toString", activation.context.gc_context),
+            Method::from_builtin(to_string, "toString", activation.gc()),
             scope,
             None,
             None,
@@ -95,7 +99,7 @@ pub fn class_init<'gc>(
         "toLocaleString",
         FunctionObject::from_method(
             activation,
-            Method::from_builtin(to_string, "toLocaleString", activation.context.gc_context),
+            Method::from_builtin(to_string, "toLocaleString", activation.gc()),
             scope,
             None,
             None,
@@ -104,23 +108,11 @@ pub fn class_init<'gc>(
         .into(),
         activation,
     )?;
+    function_proto.set_local_property_is_enumerable(activation.gc(), "call".into(), false);
+    function_proto.set_local_property_is_enumerable(activation.gc(), "apply".into(), false);
+    function_proto.set_local_property_is_enumerable(activation.gc(), "toString".into(), false);
     function_proto.set_local_property_is_enumerable(
-        activation.context.gc_context,
-        "call".into(),
-        false,
-    );
-    function_proto.set_local_property_is_enumerable(
-        activation.context.gc_context,
-        "apply".into(),
-        false,
-    );
-    function_proto.set_local_property_is_enumerable(
-        activation.context.gc_context,
-        "toString".into(),
-        false,
-    );
-    function_proto.set_local_property_is_enumerable(
-        activation.context.gc_context,
+        activation.gc(),
         "toLocaleString".into(),
         false,
     );
@@ -131,9 +123,11 @@ pub fn class_init<'gc>(
 /// Implements `Function.prototype.call`
 fn call<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    func: Object<'gc>,
+    func: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let func = func.as_object().unwrap();
+
     let this = args.get(0).copied().unwrap_or(Value::Null);
 
     if args.len() > 1 {
@@ -146,9 +140,11 @@ fn call<'gc>(
 /// Implements `Function.prototype.apply`
 fn apply<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    func: Object<'gc>,
+    func: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let func = func.as_object().unwrap();
+
     let this = args.get(0).copied().unwrap_or(Value::Null);
 
     let arg_array = args.get(1).cloned().unwrap_or(Value::Undefined).as_object();
@@ -176,7 +172,7 @@ fn apply<'gc>(
 /// Implements `Function.prototype.toString` and `Function.prototype.toLocaleString`
 fn to_string<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     Ok("function Function() {}".into())
@@ -184,9 +180,11 @@ fn to_string<'gc>(
 
 fn length<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(this) = this.as_function_object() {
         return Ok(this.num_parameters().into());
     }
@@ -196,9 +194,11 @@ fn length<'gc>(
 
 fn prototype<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(function) = this.as_function_object() {
         if let Some(proto) = function.prototype() {
             return Ok(proto.into());
@@ -212,12 +212,14 @@ fn prototype<'gc>(
 
 fn set_prototype<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(function) = this.as_function_object() {
         let new_proto = args.get(0).unwrap_or(&Value::Undefined).as_object();
-        function.set_prototype(new_proto, activation.context.gc_context);
+        function.set_prototype(new_proto, activation.gc());
     }
 
     Ok(Value::Undefined)
@@ -285,12 +287,12 @@ pub fn create_class<'gc>(
         Method::from_builtin(class_call, "<Function call handler>", gc_context),
     );
 
-    function_i_class.mark_traits_loaded(activation.context.gc_context);
+    function_i_class.mark_traits_loaded(activation.gc());
     function_i_class
         .init_vtable(activation.context)
         .expect("Native class's vtable should initialize");
 
-    function_c_class.mark_traits_loaded(activation.context.gc_context);
+    function_c_class.mark_traits_loaded(activation.gc());
     function_c_class
         .init_vtable(activation.context)
         .expect("Native class's vtable should initialize");

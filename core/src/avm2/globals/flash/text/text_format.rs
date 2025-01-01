@@ -1,6 +1,7 @@
 use crate::avm2::activation::Activation;
 use crate::avm2::error::make_error_2008;
-use crate::avm2::object::{ArrayObject, Object, TObject};
+use crate::avm2::object::{ArrayObject, TObject};
+use crate::avm2::parameters::ParametersExt;
 use crate::avm2::value::Value;
 use crate::avm2::Error;
 use crate::ecma_conversions::round_to_even;
@@ -11,9 +12,11 @@ pub use crate::avm2::object::textformat_allocator as text_format_allocator;
 
 pub fn get_align<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return Ok(text_format
             .align
@@ -31,9 +34,11 @@ pub fn get_align<'gc>(
 
 pub fn set_align<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
         let value = args.get(0).unwrap_or(&Value::Undefined);
         let value = match value {
@@ -62,9 +67,11 @@ pub fn set_align<'gc>(
 
 pub fn get_block_indent<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return Ok(text_format
             .block_indent
@@ -77,9 +84,11 @@ pub fn get_block_indent<'gc>(
 
 pub fn set_block_indent<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
         let value = args.get(0).unwrap_or(&Value::Undefined);
         text_format.block_indent = match value {
@@ -93,9 +102,11 @@ pub fn set_block_indent<'gc>(
 
 pub fn get_bold<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return Ok(text_format
             .bold
@@ -108,9 +119,11 @@ pub fn get_bold<'gc>(
 
 pub fn set_bold<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
         let value = args.get(0).unwrap_or(&Value::Undefined);
         text_format.bold = match value {
@@ -124,9 +137,11 @@ pub fn set_bold<'gc>(
 
 pub fn get_bullet<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return Ok(text_format
             .bullet
@@ -139,9 +154,11 @@ pub fn get_bullet<'gc>(
 
 pub fn set_bullet<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
         let value = args.get(0).unwrap_or(&Value::Undefined);
         text_format.bullet = match value {
@@ -155,9 +172,11 @@ pub fn set_bullet<'gc>(
 
 pub fn get_color<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return Ok(text_format
             .color
@@ -170,9 +189,11 @@ pub fn get_color<'gc>(
 
 pub fn set_color<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
         let value = args.get(0).unwrap_or(&Value::Undefined);
         text_format.color = match value {
@@ -186,9 +207,11 @@ pub fn set_color<'gc>(
 
 pub fn get_display<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return Ok(text_format
             .display
@@ -205,9 +228,11 @@ pub fn get_display<'gc>(
 
 pub fn set_display<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
         let value = args.get(0).unwrap_or(&Value::Undefined);
         let value = match value {
@@ -235,12 +260,14 @@ pub fn set_display<'gc>(
 
 pub fn get_font<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return Ok(text_format.font.as_ref().map_or(Value::Null, |font| {
-            AvmString::new(activation.context.gc_context, font.as_wstr()).into()
+            AvmString::new(activation.gc(), font.as_wstr()).into()
         }));
     }
 
@@ -249,9 +276,11 @@ pub fn get_font<'gc>(
 
 pub fn set_font<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
         let value = args.get(0).unwrap_or(&Value::Undefined);
         text_format.font = match value {
@@ -265,9 +294,11 @@ pub fn set_font<'gc>(
 
 pub fn get_indent<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return Ok(text_format
             .indent
@@ -280,9 +311,11 @@ pub fn get_indent<'gc>(
 
 pub fn set_indent<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
         let value = args.get(0).unwrap_or(&Value::Undefined);
         text_format.indent = match value {
@@ -296,9 +329,11 @@ pub fn set_indent<'gc>(
 
 pub fn get_italic<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return Ok(text_format
             .italic
@@ -311,9 +346,11 @@ pub fn get_italic<'gc>(
 
 pub fn set_italic<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
         let value = args.get(0).unwrap_or(&Value::Undefined);
         text_format.italic = match value {
@@ -327,9 +364,11 @@ pub fn set_italic<'gc>(
 
 pub fn get_kerning<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return Ok(text_format
             .kerning
@@ -342,9 +381,11 @@ pub fn get_kerning<'gc>(
 
 pub fn set_kerning<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
         let value = args.get(0).unwrap_or(&Value::Undefined);
         text_format.kerning = match value {
@@ -358,9 +399,11 @@ pub fn set_kerning<'gc>(
 
 pub fn get_leading<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return Ok(text_format
             .leading
@@ -373,9 +416,11 @@ pub fn get_leading<'gc>(
 
 pub fn set_leading<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
         let value = args.get(0).unwrap_or(&Value::Undefined);
         text_format.leading = match value {
@@ -389,9 +434,11 @@ pub fn set_leading<'gc>(
 
 pub fn get_left_margin<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return Ok(text_format
             .left_margin
@@ -404,9 +451,11 @@ pub fn get_left_margin<'gc>(
 
 pub fn set_left_margin<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
         let value = args.get(0).unwrap_or(&Value::Undefined);
         text_format.left_margin = match value {
@@ -420,9 +469,11 @@ pub fn set_left_margin<'gc>(
 
 pub fn get_letter_spacing<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return Ok(text_format
             .letter_spacing
@@ -435,9 +486,11 @@ pub fn get_letter_spacing<'gc>(
 
 pub fn set_letter_spacing<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
         let value = args.get(0).unwrap_or(&Value::Undefined);
         text_format.letter_spacing = match value {
@@ -451,9 +504,11 @@ pub fn set_letter_spacing<'gc>(
 
 pub fn get_right_margin<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return Ok(text_format
             .right_margin
@@ -466,9 +521,11 @@ pub fn get_right_margin<'gc>(
 
 pub fn set_right_margin<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
         let value = args.get(0).unwrap_or(&Value::Undefined);
         text_format.right_margin = match value {
@@ -482,9 +539,11 @@ pub fn set_right_margin<'gc>(
 
 pub fn get_size<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return Ok(text_format
             .size
@@ -497,9 +556,11 @@ pub fn get_size<'gc>(
 
 pub fn set_size<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
         let value = args.get(0).unwrap_or(&Value::Undefined);
         text_format.size = match value {
@@ -513,16 +574,18 @@ pub fn set_size<'gc>(
 
 pub fn get_tab_stops<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return text_format
             .tab_stops
             .as_ref()
             .map_or(Ok(Value::Null), |tab_stops| {
                 let tab_stop_storage = tab_stops.iter().copied().collect();
-                Ok(ArrayObject::from_storage(activation, tab_stop_storage)?.into())
+                Ok(ArrayObject::from_storage(activation, tab_stop_storage).into())
             });
     }
 
@@ -531,28 +594,28 @@ pub fn get_tab_stops<'gc>(
 
 pub fn set_tab_stops<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
-        let value = args.get(0).unwrap_or(&Value::Undefined);
+        let value = args.try_get_object(activation, 0);
         text_format.tab_stops = match value {
-            Value::Null => None,
-            Value::Object(obj) => {
-                let length = obj.as_array_storage().map_or(0, |v| v.length());
+            Some(obj) => {
+                let array_storage = obj.as_array_storage().unwrap();
+                let length = array_storage.length();
 
                 let tab_stops: Result<Vec<_>, Error<'gc>> = (0..length)
                     .map(|i| {
-                        let element = obj.get_public_property(
-                            AvmString::new_utf8(activation.context.gc_context, i.to_string()),
-                            activation,
-                        )?;
-                        Ok(round_to_even(element.coerce_to_number(activation)?).into())
+                        let value = array_storage.get(i).unwrap_or(Value::Number(0.0));
+
+                        Ok(round_to_even(value.coerce_to_number(activation)?).into())
                     })
                     .collect();
                 Some(tab_stops?)
             }
-            _ => unreachable!("Array-typed argument can only be Object or Null"),
+            None => None,
         };
     }
 
@@ -561,12 +624,14 @@ pub fn set_tab_stops<'gc>(
 
 pub fn get_target<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return Ok(text_format.target.as_ref().map_or(Value::Null, |target| {
-            AvmString::new(activation.context.gc_context, target.as_wstr()).into()
+            AvmString::new(activation.gc(), target.as_wstr()).into()
         }));
     }
 
@@ -575,9 +640,11 @@ pub fn get_target<'gc>(
 
 pub fn set_target<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
         let value = args.get(0).unwrap_or(&Value::Undefined);
         text_format.target = match value {
@@ -591,9 +658,11 @@ pub fn set_target<'gc>(
 
 pub fn get_underline<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return Ok(text_format
             .underline
@@ -606,9 +675,11 @@ pub fn get_underline<'gc>(
 
 pub fn set_underline<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
         let value = args.get(0).unwrap_or(&Value::Undefined);
         text_format.underline = match value {
@@ -622,12 +693,14 @@ pub fn set_underline<'gc>(
 
 pub fn get_url<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(text_format) = this.as_text_format() {
         return Ok(text_format.url.as_ref().map_or(Value::Null, |url| {
-            AvmString::new(activation.context.gc_context, url.as_wstr()).into()
+            AvmString::new(activation.gc(), url.as_wstr()).into()
         }));
     }
 
@@ -636,9 +709,11 @@ pub fn get_url<'gc>(
 
 pub fn set_url<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut text_format) = this.as_text_format_mut() {
         let value = args.get(0).unwrap_or(&Value::Undefined);
         text_format.url = match value {

@@ -3,15 +3,16 @@
 use std::rc::Rc;
 
 use crate::avm2::class::{AllocatorFn, CustomConstructorFn};
-use crate::avm2::error::make_error_1107;
+use crate::avm2::error::{make_error_1014, make_error_1107, type_error, Error1014Type};
 use crate::avm2::globals::{
     init_builtin_system_classes, init_native_system_classes, SystemClassDefs, SystemClasses,
 };
 use crate::avm2::method::{Method, NativeMethodImpl};
 use crate::avm2::scope::ScopeChain;
 use crate::avm2::script::{Script, TranslationUnit};
+use crate::character::Character;
 use crate::context::UpdateContext;
-use crate::display_object::{DisplayObject, DisplayObjectWeak, TDisplayObject};
+use crate::display_object::{DisplayObject, DisplayObjectWeak, MovieClip, TDisplayObject};
 use crate::string::{AvmString, StringContext};
 use crate::tag_utils::SwfMovie;
 use crate::PlayerRuntime;
@@ -309,24 +310,18 @@ impl<'gc> Avm2<'gc> {
                 init_activation
                     .context
                     .avm2
-                    .push_global_init(init_activation.context.gc_context, script);
-                let r = (method.method)(&mut init_activation, scope, &[]);
-                init_activation
-                    .context
-                    .avm2
-                    .pop_call(init_activation.context.gc_context);
+                    .push_global_init(init_activation.gc(), script);
+                let r = (method.method)(&mut init_activation, Value::Object(scope), &[]);
+                init_activation.context.avm2.pop_call(init_activation.gc());
                 r?;
             }
             Method::Bytecode(method) => {
                 init_activation
                     .context
                     .avm2
-                    .push_global_init(init_activation.context.gc_context, script);
+                    .push_global_init(init_activation.gc(), script);
                 let r = init_activation.run_actions(method);
-                init_activation
-                    .context
-                    .avm2
-                    .pop_call(init_activation.context.gc_context);
+                init_activation.context.avm2.pop_call(init_activation.gc());
                 r?;
             }
         };
@@ -366,7 +361,7 @@ impl<'gc> Avm2<'gc> {
         let orphan_objs: Rc<_> = context.avm2.orphan_objects.clone();
 
         for orphan in orphan_objs.iter() {
-            if let Some(dobj) = valid_orphan(*orphan, context.gc_context) {
+            if let Some(dobj) = valid_orphan(*orphan, context.gc()) {
                 f(dobj, context);
             }
         }
@@ -539,7 +534,7 @@ impl<'gc> Avm2<'gc> {
                 .get(i)
                 .copied();
 
-            if let Some(object) = object.and_then(|obj| obj.upgrade(context.gc_context)) {
+            if let Some(object) = object.and_then(|obj| obj.upgrade(context.gc())) {
                 let mut activation = Activation::from_nothing(context);
 
                 if object.is_of_type(on_type.inner_class_definition()) {
@@ -577,6 +572,70 @@ impl<'gc> Avm2<'gc> {
             .map_err(|e| format!("{e:?}"))?;
 
         Ok(())
+    }
+
+    pub fn lookup_class_for_character(
+        activation: &mut Activation<'_, 'gc>,
+        movie_clip: MovieClip<'gc>,
+        domain: Domain<'gc>,
+        name: QName<'gc>,
+        id: u16,
+    ) -> Result<ClassObject<'gc>, Error<'gc>> {
+        let movie = movie_clip.movie().clone();
+
+        let class_object = domain
+            .get_defined_value(activation, name)?
+            .as_object()
+            .and_then(|o| o.as_class_object())
+            .ok_or_else(|| {
+                make_error_1014(
+                    activation,
+                    Error1014Type::ReferenceError,
+                    name.to_qualified_name(activation.gc()),
+                )
+            })?;
+
+        let class = class_object.inner_class_definition();
+
+        let library = activation.context.library.library_for_movie_mut(movie);
+        let character = library.character_by_id(id);
+
+        if let Some(character) = character {
+            if matches!(
+                character,
+                Character::EditText(_)
+                    | Character::Graphic(_)
+                    | Character::MovieClip(_)
+                    | Character::Avm2Button(_)
+            ) {
+                // The class must extend DisplayObject to ensure that events
+                // can properly be dispatched to them
+                if !class.has_class_in_chain(activation.avm2().class_defs().display_object) {
+                    return Err(Error::AvmError(type_error(
+                        activation,
+                        &format!("Error #2022: Class {}$ must inherit from DisplayObject to link to a symbol.", name.to_qualified_name(activation.gc())),
+                        2022,
+                    )?));
+                }
+            }
+        } else if movie_clip.avm2_class().is_none() {
+            // If this ID doesn't correspond to any character, and the MC that
+            // we're processing doesn't have an AVM2 class set, then this
+            // ClassObject is going to be the class of the MC. Ensure it
+            // subclasses Sprite.
+            if !class.has_class_in_chain(activation.avm2().class_defs().sprite) {
+                return Err(Error::AvmError(type_error(
+                    activation,
+                    &format!(
+                        "Error #2023: Class {}$ must inherit from Sprite to link to the root.",
+                        name.to_qualified_name(activation.gc())
+                    ),
+                    2023,
+                )?));
+            }
+        }
+
+        Ok(class_object)
     }
 
     /// Load an ABC file embedded in a `DoAbc` or `DoAbc2` tag.

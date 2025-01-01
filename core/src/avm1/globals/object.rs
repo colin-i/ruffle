@@ -45,9 +45,7 @@ pub fn object_function<'gc>(
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let obj = match args.get(0).unwrap_or(&Value::Undefined) {
-        Value::Undefined | Value::Null => {
-            Object::from(ScriptObject::new(activation.context.gc_context, None))
-        }
+        Value::Undefined | Value::Null => Object::from(ScriptObject::new(activation.gc(), None)),
         val => val.coerce_to_object(activation),
     };
     Ok(obj.into())
@@ -281,26 +279,23 @@ pub fn as_set_prop_flags<'gc>(
     }
 
     match args.get(1) {
-        Some(&Value::Null) => object.set_attributes(
-            activation.context.gc_context,
-            None,
-            set_attributes,
-            clear_attributes,
-        ),
+        Some(&Value::Null) => {
+            object.set_attributes(activation.gc(), None, set_attributes, clear_attributes)
+        }
         Some(v) => {
             let props = v.coerce_to_string(activation)?;
             if props.contains(b',') {
                 for prop_name in props.split(b',') {
                     object.set_attributes(
-                        activation.context.gc_context,
-                        Some(AvmString::new(activation.context.gc_context, prop_name)),
+                        activation.gc(),
+                        Some(AvmString::new(activation.gc(), prop_name)),
                         set_attributes,
                         clear_attributes,
                     )
                 }
             } else {
                 object.set_attributes(
-                    activation.context.gc_context,
+                    activation.gc(),
                     Some(props),
                     set_attributes,
                     clear_attributes,
@@ -321,7 +316,7 @@ pub fn create_object_object<'gc>(
     fn_proto: Object<'gc>,
 ) -> Object<'gc> {
     let object_function = FunctionObject::constructor(
-        context.gc_context,
+        context.gc(),
         Executable::Native(constructor),
         Executable::Native(object_function),
         fn_proto,

@@ -1,7 +1,8 @@
 //! `flash.media.Sound` builtin/prototype
 
 use crate::avm2::activation::Activation;
-use crate::avm2::object::{Object, QueuedPlay, SoundChannelObject, TObject};
+use crate::avm2::globals::slots::flash_net_url_request as url_request_slots;
+use crate::avm2::object::{QueuedPlay, SoundChannelObject, TObject};
 use crate::avm2::parameters::ParametersExt;
 use crate::avm2::value::Value;
 use crate::avm2::Avm2;
@@ -18,9 +19,11 @@ pub use crate::avm2::object::sound_allocator;
 /// Implements `flash.media.Sound`'s 'init' method. which is called from the constructor.
 pub fn init<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(sound_object) = this.as_sound_object() {
         let class_def = this.instance_class();
 
@@ -54,9 +57,11 @@ pub fn init<'gc>(
 /// Implements `Sound.bytesTotal`
 pub fn get_bytes_total<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(sound) = this.as_sound_object() {
         if let Some(sound_handle) = sound.sound_handle() {
             if let Some(length) = activation.context.audio.get_sound_size(sound_handle) {
@@ -71,7 +76,7 @@ pub fn get_bytes_total<'gc>(
 
 pub fn get_bytes_loaded<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     // This should have a different value from bytesTotal when the sound is loading.
@@ -82,7 +87,7 @@ pub fn get_bytes_loaded<'gc>(
 /// Implements `Sound.isBuffering`
 pub fn get_is_buffering<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     avm2_stub_getter!(activation, "flash.media.Sound", "isBuffering");
@@ -93,7 +98,7 @@ pub fn get_is_buffering<'gc>(
 /// Implements `Sound.isURLInaccessible`
 pub fn get_is_url_inaccessible<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     avm2_stub_getter!(activation, "flash.media.Sound", "isURLInaccessible");
@@ -104,7 +109,7 @@ pub fn get_is_url_inaccessible<'gc>(
 /// Implements `Sound.url`
 pub fn get_url<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     avm2_stub_getter!(activation, "flash.media.Sound", "url");
@@ -115,9 +120,11 @@ pub fn get_url<'gc>(
 /// Implements `Sound.length`
 pub fn get_length<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(sound) = this.as_sound_object() {
         if let Some(sound_handle) = sound.sound_handle() {
             if let Some(duration) = activation.context.audio.get_sound_duration(sound_handle) {
@@ -133,9 +140,11 @@ pub fn get_length<'gc>(
 /// Implements `Sound.play`
 pub fn play<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(sound_object) = this.as_sound_object() {
         let position = args
             .get(0)
@@ -164,10 +173,7 @@ pub fn play<'gc>(
         };
 
         let sound_transform = if let Some(sound_transform) = sound_transform {
-            Some(SoundTransform::from_avm2_object(
-                activation,
-                sound_transform,
-            )?)
+            Some(SoundTransform::from_avm2_object(sound_transform))
         } else {
             None
         };
@@ -194,7 +200,7 @@ pub fn play<'gc>(
 /// `Sound.extract`
 pub fn extract<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     avm2_stub_method!(activation, "flash.media.Sound", "extract");
@@ -216,7 +222,7 @@ pub fn extract<'gc>(
 /// `Sound.close`
 pub fn close<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     avm2_stub_method!(activation, "flash.media.Sound", "close");
@@ -226,9 +232,11 @@ pub fn close<'gc>(
 /// `Sound.load`
 pub fn load<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     // FIXME - don't allow replacing an existing sound
     let url_request = match args.get(0) {
         Some(Value::Object(request)) => request,
@@ -237,7 +245,7 @@ pub fn load<'gc>(
     };
 
     let url = url_request
-        .get_public_property("url", activation)?
+        .get_slot(url_request_slots::_URL)
         .coerce_to_string(activation)?;
 
     // TODO: context parameter currently unused.
@@ -260,9 +268,11 @@ pub fn load<'gc>(
 /// `Sound.loadCompressedDataFromByteArray`
 pub fn load_compressed_data_from_byte_array<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     let bytearray = args.get_object(activation, 0, "bytes")?;
     let bytes_length = args.get_u32(activation, 1)?;
     let bytearray = bytearray.as_bytearray().unwrap();
@@ -308,7 +318,7 @@ pub fn load_compressed_data_from_byte_array<'gc>(
 /// `Sound.loadPCMFromByteArray`
 pub fn load_pcm_from_byte_array<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     avm2_stub_method!(activation, "flash.media.Sound", "loadPCMFromByteArray");
@@ -318,9 +328,11 @@ pub fn load_pcm_from_byte_array<'gc>(
 /// Implements `Sound.id3`
 pub fn get_id3<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(id3) = this.as_sound_object().unwrap().id3() {
         Ok(id3.into())
     } else {

@@ -39,12 +39,14 @@ const PUBLIC_INSTANCE_AND_PROTO_METHODS: &[(&str, NativeMethodImpl)] = &[
 /// Implements `String`'s instance initializer.
 pub fn instance_init<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     activation.super_init(this, &[])?;
 
-    if let Some(mut value) = this.as_primitive_mut(activation.context.gc_context) {
+    if let Some(mut value) = this.as_primitive_mut(activation.gc()) {
         if !matches!(*value, Value::String(_)) {
             *value = match args.get(0) {
                 Some(arg) => arg.coerce_to_string(activation)?.into(),
@@ -59,11 +61,13 @@ pub fn instance_init<'gc>(
 /// Implements `String`'s class initializer.
 pub fn class_init<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     let scope = activation.create_scopechain();
-    let gc_context = activation.context.gc_context;
+    let gc_context = activation.gc();
     let this_class = this.as_class_object().unwrap();
     let proto = this_class.prototype();
 
@@ -88,7 +92,7 @@ pub fn class_init<'gc>(
 
 pub fn call_handler<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     match args.get(0) {
@@ -100,9 +104,11 @@ pub fn call_handler<'gc>(
 /// Implements `length` property's getter
 fn length<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Value::String(s) = this.value_of(activation.strings())? {
         return Ok(s.len().into());
     }
@@ -113,9 +119,11 @@ fn length<'gc>(
 /// Implements `String.charAt`
 fn char_at<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Value::String(s) = this.value_of(activation.strings())? {
         // This function takes Number, so if we use coerce_to_i32 instead of coerce_to_number, the value may overflow.
         let n = args
@@ -141,9 +149,11 @@ fn char_at<'gc>(
 /// Implements `String.charCodeAt`
 fn char_code_at<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Value::String(s) = this.value_of(activation.strings())? {
         // This function takes Number, so if we use coerce_to_i32 instead of coerce_to_number, the value may overflow.
         let n = args
@@ -165,15 +175,14 @@ fn char_code_at<'gc>(
 /// Implements `String.concat`
 fn concat<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let lhs = Value::from(this).coerce_to_string(activation)?;
+    let mut ret = this.coerce_to_string(activation)?;
 
-    let mut ret = lhs;
     for arg in args {
         let s = arg.coerce_to_string(activation)?;
-        ret = AvmString::concat(activation.context.gc_context, ret, s);
+        ret = AvmString::concat(activation.gc(), ret, s);
     }
 
     Ok(ret.into())
@@ -182,7 +191,7 @@ fn concat<'gc>(
 /// Implements `String.fromCharCode`
 fn from_char_code<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let mut out = WString::with_capacity(args.len(), false);
@@ -190,16 +199,17 @@ fn from_char_code<'gc>(
         let i = arg.coerce_to_u32(activation)? as u16;
         out.push(i);
     }
-    Ok(AvmString::new(activation.context.gc_context, out).into())
+    Ok(AvmString::new(activation.gc(), out).into())
 }
 
 /// Implements `String.indexOf`
 fn index_of<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let this = Value::from(this).coerce_to_string(activation)?;
+    let this = this.coerce_to_string(activation)?;
+
     let pattern = match args.get(0) {
         None => return Ok(Value::Integer(-1)),
         Some(s) => s.clone().coerce_to_string(activation)?,
@@ -219,10 +229,11 @@ fn index_of<'gc>(
 /// Implements `String.lastIndexOf`
 fn last_index_of<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let this = Value::from(this).coerce_to_string(activation)?;
+    let this = this.coerce_to_string(activation)?;
+
     let pattern = match args.get(0) {
         None => return Ok(Value::Undefined),
         Some(s) => s.clone().coerce_to_string(activation)?,
@@ -247,10 +258,11 @@ fn last_index_of<'gc>(
 /// NOTE: Despite the declaration of this function in the documentation, FP does not support multiple strings in comparison
 fn locale_compare<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let this = Value::from(this).coerce_to_string(activation)?;
+    let this = this.coerce_to_string(activation)?;
+
     let other = match args.get(0) {
         None => Value::Undefined.coerce_to_string(activation)?,
         Some(s) => s.clone().coerce_to_string(activation)?,
@@ -277,11 +289,12 @@ fn locale_compare<'gc>(
 /// Implements `String.match`
 fn match_s<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.coerce_to_string(activation)?;
+
     let pattern = args.get(0).unwrap_or(&Value::Undefined);
-    let this = Value::from(this).coerce_to_string(activation)?;
 
     let regexp_class = activation.avm2().classes().regexp;
     let pattern = if !pattern.is_of_type(activation, regexp_class.inner_class_definition()) {
@@ -293,7 +306,7 @@ fn match_s<'gc>(
             .expect("Regexp objects must be Value::Object")
     };
 
-    if let Some(mut regexp) = pattern.as_regexp_mut(activation.context.gc_context) {
+    if let Some(mut regexp) = pattern.as_regexp_mut(activation.gc()) {
         let mut storage = ArrayStorage::new(0);
         if regexp.flags().contains(RegExpFlags::GLOBAL) {
             let mut last = regexp.last_index();
@@ -303,18 +316,15 @@ fn match_s<'gc>(
                 if regexp.last_index() == last {
                     break;
                 }
-                storage.push(
-                    AvmString::new(activation.context.gc_context, &this[result.range()]).into(),
-                );
+                storage.push(AvmString::new(activation.gc(), &this[result.range()]).into());
                 last = regexp.last_index();
             }
             regexp.set_last_index(0);
             if old_last_index == regexp.last_index() {
                 regexp.set_last_index(1);
             }
-            return Ok(ArrayObject::from_storage(activation, storage)
-                .unwrap()
-                .into());
+
+            return Ok(ArrayObject::from_storage(activation, storage).into());
         } else {
             let old = regexp.last_index();
             regexp.set_last_index(0);
@@ -323,12 +333,11 @@ fn match_s<'gc>(
 
                 let mut storage = ArrayStorage::new(0);
                 for substring in substrings {
-                    storage.push(AvmString::new(activation.context.gc_context, substring).into());
+                    storage.push(AvmString::new(activation.gc(), substring).into());
                 }
                 regexp.set_last_index(old);
-                return Ok(ArrayObject::from_storage(activation, storage)
-                    .unwrap()
-                    .into());
+
+                return Ok(ArrayObject::from_storage(activation, storage).into());
             } else {
                 regexp.set_last_index(old);
                 // If the pattern parameter is a String or a non-global regular expression
@@ -344,10 +353,10 @@ fn match_s<'gc>(
 /// Implements `String.replace`
 fn replace<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let this = Value::from(this).coerce_to_string(activation)?;
+    let this = this.coerce_to_string(activation)?;
     let pattern = args.get(0).unwrap_or(&Value::Undefined);
     let replacement = args.get(1).unwrap_or(&Value::Undefined);
 
@@ -380,7 +389,7 @@ fn replace<'gc>(
         }
         ret.push_str(&this[position + pattern.len()..]);
 
-        Ok(AvmString::new(activation.context.gc_context, ret).into())
+        Ok(AvmString::new(activation.gc(), ret).into())
     } else {
         Ok(this.into())
     }
@@ -389,11 +398,12 @@ fn replace<'gc>(
 /// Implements `String.search`
 fn search<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.coerce_to_string(activation)?;
+
     let pattern = args.get(0).unwrap_or(&Value::Undefined);
-    let this = Value::from(this).coerce_to_string(activation)?;
 
     let regexp_class = activation.avm2().classes().regexp;
     let pattern = if !pattern.is_of_type(activation, regexp_class.inner_class_definition()) {
@@ -405,7 +415,7 @@ fn search<'gc>(
             .expect("Regexp objects must be Value::Object")
     };
 
-    if let Some(mut regexp) = pattern.as_regexp_mut(activation.context.gc_context) {
+    if let Some(mut regexp) = pattern.as_regexp_mut(activation.gc()) {
         let old = regexp.last_index();
         regexp.set_last_index(0);
         if let Some(result) = regexp.exec(this) {
@@ -427,10 +437,11 @@ fn search<'gc>(
 /// Implements `String.slice`
 fn slice<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let this = Value::from(this).coerce_to_string(activation)?;
+    let this = this.coerce_to_string(activation)?;
+
     let start_index = match args.get(0) {
         None => 0,
         Some(n) => {
@@ -459,12 +470,13 @@ fn slice<'gc>(
 /// Implements `String.split`
 fn split<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.coerce_to_string(activation)?;
+
     let delimiter = args.get(0).unwrap_or(&Value::Undefined);
 
-    let this = Value::from(this).coerce_to_string(activation)?;
     let limit = match args.get(1).unwrap_or(&Value::Undefined) {
         Value::Undefined => usize::MAX,
         limit => limit.coerce_to_i32(activation)?.max(0) as usize,
@@ -473,7 +485,7 @@ fn split<'gc>(
     if let Some(mut regexp) = delimiter
         .as_object()
         .as_ref()
-        .and_then(|o| o.as_regexp_mut(activation.context.gc_context))
+        .and_then(|o| o.as_regexp_mut(activation.gc()))
     {
         return Ok(regexp.split(activation, this, limit)?.into());
     }
@@ -491,23 +503,20 @@ fn split<'gc>(
     } else {
         this.split(&delimiter)
             .take(limit)
-            .map(|c| Value::from(AvmString::new(activation.context.gc_context, c)))
+            .map(|c| Value::from(AvmString::new(activation.gc(), c)))
             .collect()
     };
 
-    Ok(ArrayObject::from_storage(activation, storage)
-        .unwrap()
-        .into())
+    Ok(ArrayObject::from_storage(activation, storage).into())
 }
 
 /// Implements `String.substr`
 fn substr<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let this_val = Value::from(this);
-    let this = this_val.coerce_to_string(activation)?;
+    let this = this.coerce_to_string(activation)?;
 
     if args.is_empty() {
         return Ok(Value::from(this));
@@ -558,14 +567,13 @@ fn substr<'gc>(
 /// Implements `String.substring`
 fn substring<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let this_val = Value::from(this);
-    let this = this_val.coerce_to_string(activation)?;
+    let this = this.coerce_to_string(activation)?;
 
     if args.is_empty() {
-        return Ok(Value::from(this));
+        return Ok(this.into());
     }
 
     let mut start_index = string_index(
@@ -595,14 +603,13 @@ fn substring<'gc>(
 /// Implements `String.toLowerCase`
 fn to_lower_case<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let this_val = Value::from(this);
-    let this = this_val.coerce_to_string(activation)?;
+    let this = this.coerce_to_string(activation)?;
 
     Ok(AvmString::new(
-        activation.context.gc_context,
+        activation.gc(),
         this.iter()
             .map(crate::string::utils::swf_to_lowercase)
             .collect::<WString>(),
@@ -613,9 +620,11 @@ fn to_lower_case<'gc>(
 /// Implements `String.prototype.toString`
 fn to_string<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(this) = this.as_primitive() {
         if let Value::String(v) = *this {
             return Ok(v.into());
@@ -633,23 +642,24 @@ fn to_string<'gc>(
 /// Implements `String.valueOf`
 fn value_of<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     this.value_of(activation.strings())
 }
 
 /// Implements `String.toUpperCase`
 fn to_upper_case<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let this_val = Value::from(this);
-    let this = this_val.coerce_to_string(activation)?;
+    let this = this.coerce_to_string(activation)?;
 
     Ok(AvmString::new(
-        activation.context.gc_context,
+        activation.gc(),
         this.iter()
             .map(crate::string::utils::swf_to_uppercase)
             .collect::<WString>(),
@@ -660,9 +670,11 @@ fn to_upper_case<'gc>(
 #[cfg(feature = "test_only_as3")]
 fn is_dependent<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(prim) = this.as_primitive() {
         if let Value::String(s) = *prim {
             return Ok(s.is_dependent().into());
@@ -718,14 +730,14 @@ pub fn create_class<'gc>(activation: &mut Activation<'_, 'gc>) -> Class<'gc> {
     class.define_builtin_class_methods(mc, namespaces.as3, AS3_CLASS_METHODS);
     class.define_builtin_class_methods(mc, namespaces.public_all(), PUBLIC_CLASS_METHODS);
 
-    class.mark_traits_loaded(activation.context.gc_context);
+    class.mark_traits_loaded(activation.gc());
     class
         .init_vtable(activation.context)
         .expect("Native class's vtable should initialize");
 
     let c_class = class.c_class().expect("Class::new returns an i_class");
 
-    c_class.mark_traits_loaded(activation.context.gc_context);
+    c_class.mark_traits_loaded(activation.gc());
     c_class
         .init_vtable(activation.context)
         .expect("Native class's vtable should initialize");

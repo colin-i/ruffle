@@ -1,9 +1,11 @@
 use crate::avm2::error::{argument_error, error, make_error_2008};
+use crate::avm2::globals::slots::flash_geom_matrix_3d as matrix3d_slots;
+use crate::avm2::globals::slots::flash_geom_rectangle as rectangle_slots;
 use crate::avm2::parameters::ParametersExt;
 use crate::avm2::Activation;
+use crate::avm2::Error;
 use crate::avm2::TObject;
 use crate::avm2::Value;
-use crate::avm2::{Error, Object};
 use crate::avm2_stub_method;
 use ruffle_render::backend::Context3DWrapMode;
 use ruffle_render::backend::{
@@ -15,9 +17,11 @@ use swf::{Rectangle, Twips};
 
 pub fn create_index_buffer<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         // FIXME - get bufferUsage and pass it through
         let num_indices = args.get_u32(activation, 0)?;
@@ -28,9 +32,11 @@ pub fn create_index_buffer<'gc>(
 
 pub fn create_vertex_buffer<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         // FIXME - get bufferUsage and pass it through
         let num_vertices = args.get_u32(activation, 0)?;
@@ -52,9 +58,11 @@ pub fn create_vertex_buffer<'gc>(
 
 pub fn configure_back_buffer<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(mut context) = this.as_context_3d() {
         let width = args.get_u32(activation, 0)?;
         let height = args.get_u32(activation, 1)?;
@@ -126,9 +134,11 @@ pub fn configure_back_buffer<'gc>(
 
 pub fn set_vertex_buffer_at<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         let index = args.get_u32(activation, 0)?;
         let buffer = args.try_get_object(activation, 1);
@@ -169,9 +179,11 @@ pub fn set_vertex_buffer_at<'gc>(
 
 pub fn create_program<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         return context.create_program(activation);
     }
@@ -180,9 +192,11 @@ pub fn create_program<'gc>(
 
 pub fn set_program<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         let program = args
             .try_get_object(activation, 0)
@@ -194,9 +208,11 @@ pub fn set_program<'gc>(
 
 pub fn draw_triangles<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         let index_buffer = args
             .get_object(activation, 0, "indexBuffer")?
@@ -213,9 +229,11 @@ pub fn draw_triangles<'gc>(
 
 pub fn present<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         context.present(activation)?;
     }
@@ -224,9 +242,11 @@ pub fn present<'gc>(
 
 pub fn get_profile<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         return match context.with_context_3d(|context| context.profile()) {
             Context3DProfile::Baseline => Ok("baseline".into()),
@@ -242,9 +262,11 @@ pub fn get_profile<'gc>(
 
 pub fn set_culling<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         let culling = args.get_string(activation, 0)?;
 
@@ -268,9 +290,11 @@ pub fn set_culling<'gc>(
 
 pub fn set_program_constants_from_matrix<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         let program_type = args.get_string(activation, 0)?;
 
@@ -305,7 +329,7 @@ pub fn set_program_constants_from_matrix<'gc>(
         }
 
         let matrix_raw_data = matrix
-            .get_public_property("rawData", activation)?
+            .get_slot(matrix3d_slots::_RAW_DATA)
             .as_object()
             .expect("rawData cannot be null");
 
@@ -323,9 +347,11 @@ pub fn set_program_constants_from_matrix<'gc>(
 
 pub fn set_program_constants_from_vector<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         let program_type = args.get_string(activation, 0)?;
 
@@ -365,9 +391,11 @@ pub fn set_program_constants_from_vector<'gc>(
 
 pub fn clear<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         // This is a native method, so all of the arguments have been checked and coerced for us
         let red = args[0].as_f64();
@@ -384,9 +412,11 @@ pub fn clear<'gc>(
 
 pub fn create_texture<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         // This is a native method, so all of the arguments have been checked and coerced for us
         let width = args[0].as_i32() as u32;
@@ -417,9 +447,11 @@ pub fn create_texture<'gc>(
 
 pub fn create_rectangle_texture<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         // This is a native method, so all of the arguments have been checked and coerced for us
         let width = args[0].as_i32() as u32;
@@ -453,9 +485,11 @@ pub fn create_rectangle_texture<'gc>(
 
 pub fn create_cube_texture<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         // This is a native method, so all of the arguments have been checked and coerced for us
         let size = args[0].as_i32() as u32;
@@ -485,9 +519,11 @@ pub fn create_cube_texture<'gc>(
 
 pub fn set_texture_at<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         // This is a native method, so all of the arguments have been checked and coerced for us
         let sampler = args[0].as_i32() as u32;
@@ -514,9 +550,11 @@ pub fn set_texture_at<'gc>(
 
 pub fn set_color_mask<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         // This is a native method, so all of the arguments have been checked and coerced for us
         let red = args[0].coerce_to_boolean();
@@ -530,9 +568,11 @@ pub fn set_color_mask<'gc>(
 
 pub fn set_depth_test<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         // This is a native method, so all of the arguments have been checked and coerced for us
         let depth_mask = args[0].coerce_to_boolean();
@@ -550,9 +590,11 @@ pub fn set_depth_test<'gc>(
 
 pub fn set_blend_factors<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         // This is a native method, so all of the arguments have been checked and coerced for us
         let source_factor = args[0].coerce_to_string(activation)?;
@@ -577,9 +619,11 @@ pub fn set_blend_factors<'gc>(
 
 pub fn set_render_to_texture<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     let context = this.as_context_3d().unwrap();
     let texture = args
         .get_object(activation, 0, "texture")?
@@ -647,9 +691,11 @@ pub fn set_render_to_texture<'gc>(
 
 pub fn set_render_to_back_buffer<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     let context = this.as_context_3d().unwrap();
     context.set_render_to_back_buffer();
     Ok(Value::Undefined)
@@ -657,9 +703,11 @@ pub fn set_render_to_back_buffer<'gc>(
 
 pub fn set_sampler_state_at<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(context) = this.as_context_3d() {
         // This is a native method, so all of the arguments have been checked and coerced for us
         let sampler = args[0].as_i32() as u32;
@@ -704,23 +752,25 @@ pub fn set_sampler_state_at<'gc>(
 
 pub fn set_scissor_rectangle<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     let context3d = this.as_context_3d().unwrap();
     let rectangle = args.try_get_object(activation, 0);
     let rectangle = if let Some(rectangle) = rectangle {
         let x = rectangle
-            .get_public_property("x", activation)?
+            .get_slot(rectangle_slots::X)
             .coerce_to_number(activation)?;
         let y = rectangle
-            .get_public_property("y", activation)?
+            .get_slot(rectangle_slots::Y)
             .coerce_to_number(activation)?;
         let width = rectangle
-            .get_public_property("width", activation)?
+            .get_slot(rectangle_slots::WIDTH)
             .coerce_to_number(activation)?;
         let height = rectangle
-            .get_public_property("height", activation)?
+            .get_slot(rectangle_slots::HEIGHT)
             .coerce_to_number(activation)?;
         Some(Rectangle {
             x_min: Twips::from_pixels(x),
@@ -738,13 +788,15 @@ pub fn set_scissor_rectangle<'gc>(
 
 pub fn dispose<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     avm2_stub_method!(activation, "flash.display3D.Context3D", "dispose");
     this.as_context_3d()
         .unwrap()
         .stage3d()
-        .set_context3d(None, activation.context.gc_context);
+        .set_context3d(None, activation.gc());
     Ok(Value::Undefined)
 }

@@ -26,9 +26,9 @@ pub fn bitmap_allocator<'gc>(
     let orig_class = class;
     while let Some(class) = class_def {
         if class == bitmap_cls {
-            let bitmap_data = BitmapDataWrapper::dummy(activation.context.gc_context);
+            let bitmap_data = BitmapDataWrapper::dummy(activation.gc());
             let display_object = Bitmap::new_with_bitmap_data(
-                activation.context.gc_context,
+                activation.gc(),
                 0,
                 bitmap_data,
                 false,
@@ -58,23 +58,21 @@ pub fn bitmap_allocator<'gc>(
                 let new_bitmap_data = fill_bitmap_data_from_symbol(activation, &compressed);
                 let bitmap_data_obj = BitmapDataObject::from_bitmap_data_internal(
                     activation,
-                    BitmapDataWrapper::dummy(activation.context.gc_context),
+                    BitmapDataWrapper::dummy(activation.gc()),
                     bitmapdata_cls,
                 )?;
-                bitmap_data_obj.init_bitmap_data(activation.context.gc_context, new_bitmap_data);
-                new_bitmap_data.init_object2(activation.context.gc_context, bitmap_data_obj);
+                bitmap_data_obj.init_bitmap_data(activation.gc(), new_bitmap_data);
+                new_bitmap_data.init_object2(activation.gc(), bitmap_data_obj);
 
                 let child = Bitmap::new_with_bitmap_data(
-                    activation.context.gc_context,
+                    activation.gc(),
                     0,
                     new_bitmap_data,
                     false,
                     &activation.caller_movie_or_root(),
                 );
 
-                let obj = initialize_for_allocator(activation, child.into(), orig_class)?;
-                obj.set_public_property("bitmapData", bitmap_data_obj.into(), activation)?;
-                return Ok(obj);
+                return initialize_for_allocator(activation, child.into(), orig_class);
             }
         }
         class_def = class.super_class();
@@ -85,9 +83,11 @@ pub fn bitmap_allocator<'gc>(
 /// Implements `flash.display.Bitmap`'s `init` method, which is called from the constructor
 pub fn init<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     let bitmap_data = args
         .try_get_object(activation, 0)
         .and_then(|o| o.as_bitmap_data());
@@ -100,8 +100,8 @@ pub fn init<'gc>(
         if let Some(bitmap_data) = bitmap_data {
             bitmap.set_bitmap_data(activation.context, bitmap_data);
         }
-        bitmap.set_smoothing(activation.context.gc_context, smoothing);
-        bitmap.set_pixel_snapping(activation.context.gc_context, pixel_snapping);
+        bitmap.set_smoothing(activation.gc(), smoothing);
+        bitmap.set_pixel_snapping(activation.gc(), pixel_snapping);
     } else {
         unreachable!();
     }
@@ -112,9 +112,11 @@ pub fn init<'gc>(
 /// Implements `Bitmap.bitmapData`'s getter.
 pub fn get_bitmap_data<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(bitmap) = this.as_display_object().and_then(|dobj| dobj.as_bitmap()) {
         let mut value = bitmap.bitmap_data_wrapper().object2();
 
@@ -131,9 +133,11 @@ pub fn get_bitmap_data<'gc>(
 /// Implements `Bitmap.bitmapData`'s setter.
 pub fn set_bitmap_data<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(bitmap) = this.as_display_object().and_then(|dobj| dobj.as_bitmap()) {
         let bitmap_data = args.try_get_object(activation, 0);
 
@@ -153,9 +157,11 @@ pub fn set_bitmap_data<'gc>(
 /// Stub `Bitmap.pixelSnapping`'s getter
 pub fn get_pixel_snapping<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(bitmap) = this.as_display_object().and_then(|dobj| dobj.as_bitmap()) {
         let value: &WStr = bitmap.pixel_snapping().into();
         return Ok(Value::String(value.into()));
@@ -166,14 +172,16 @@ pub fn get_pixel_snapping<'gc>(
 /// Stub `Bitmap.pixelSnapping`'s setter
 pub fn set_pixel_snapping<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(bitmap) = this.as_display_object().and_then(|dobj| dobj.as_bitmap()) {
         let Some(value) = PixelSnapping::from_wstr(&args.get_string(activation, 0)?) else {
             return Err(make_error_2008(activation, "pixelSnapping"));
         };
-        bitmap.set_pixel_snapping(activation.context.gc_context, value);
+        bitmap.set_pixel_snapping(activation.gc(), value);
     }
     Ok(Value::Undefined)
 }
@@ -181,9 +189,11 @@ pub fn set_pixel_snapping<'gc>(
 /// Implement `Bitmap.smoothing`'s getter
 pub fn get_smoothing<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(bitmap) = this.as_display_object().and_then(|dobj| dobj.as_bitmap()) {
         return Ok(bitmap.smoothing().into());
     }
@@ -194,12 +204,14 @@ pub fn get_smoothing<'gc>(
 /// Implement `Bitmap.smoothing`'s setter
 pub fn set_smoothing<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(bitmap) = this.as_display_object().and_then(|dobj| dobj.as_bitmap()) {
         let smoothing = args.get_bool(0);
-        bitmap.set_smoothing(activation.context.gc_context, smoothing);
+        bitmap.set_smoothing(activation.gc(), smoothing);
     }
 
     Ok(Value::Undefined)

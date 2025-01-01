@@ -113,6 +113,7 @@ pub struct SystemClasses<'gc> {
     pub colortransform: ClassObject<'gc>,
     pub matrix: ClassObject<'gc>,
     pub matrix3d: ClassObject<'gc>,
+    pub perspectiveprojection: ClassObject<'gc>,
     pub illegaloperationerror: ClassObject<'gc>,
     pub eventdispatcher: ClassObject<'gc>,
     pub rectangle: ClassObject<'gc>,
@@ -205,9 +206,11 @@ pub struct SystemClassDefs<'gc> {
     pub graphicssolidfill: Class<'gc>,
     pub graphicsshaderfill: Class<'gc>,
     pub graphicsstroke: Class<'gc>,
-
     pub cubetexture: Class<'gc>,
     pub rectangletexture: Class<'gc>,
+    pub display_object: Class<'gc>,
+    pub sprite: Class<'gc>,
+    pub contextmenuitem: Class<'gc>,
 }
 
 impl<'gc> SystemClasses<'gc> {
@@ -272,6 +275,7 @@ impl<'gc> SystemClasses<'gc> {
             colortransform: object,
             matrix: object,
             matrix3d: object,
+            perspectiveprojection: object,
             illegaloperationerror: object,
             eventdispatcher: object,
             rectangle: object,
@@ -373,9 +377,11 @@ impl<'gc> SystemClassDefs<'gc> {
             graphicssolidfill: object,
             graphicsshaderfill: object,
             graphicsstroke: object,
-
             cubetexture: object,
             rectangletexture: object,
+            display_object: object,
+            sprite: object,
+            contextmenuitem: object,
         }
     }
 }
@@ -416,7 +422,7 @@ fn dynamic_class<'gc>(
         .init_property(&name.into(), class_object.into(), activation)
         .expect("Should set property");
 
-    domain.export_definition(name, script, activation.context.gc_context)
+    domain.export_definition(name, script, activation.gc())
 }
 
 /// Add a class builtin to the global scope.
@@ -428,7 +434,7 @@ fn class<'gc>(
     script: Script<'gc>,
     activation: &mut Activation<'_, 'gc>,
 ) -> Result<ClassObject<'gc>, Error<'gc>> {
-    let mc = activation.context.gc_context;
+    let mc = activation.gc();
     let (_, global, mut domain) = script.init();
 
     let super_class = if let Some(super_class) = class_def.super_class() {
@@ -461,7 +467,7 @@ fn vector_class<'gc>(
     script: Script<'gc>,
     activation: &mut Activation<'_, 'gc>,
 ) -> Result<ClassObject<'gc>, Error<'gc>> {
-    let mc = activation.context.gc_context;
+    let mc = activation.gc();
     let namespaces = activation.avm2().namespaces;
     let (_, global, mut domain) = script.init();
 
@@ -506,7 +512,7 @@ pub fn load_player_globals<'gc>(
     activation: &mut Activation<'_, 'gc>,
     domain: Domain<'gc>,
 ) -> Result<(), Error<'gc>> {
-    let mc = activation.context.gc_context;
+    let mc = activation.gc();
 
     // Set the outer scope of this activation to the global scope.
 
@@ -929,6 +935,7 @@ pub fn init_native_system_classes(activation: &mut Activation<'_, '_>) {
             ("flash.events", "FocusEvent", focusevent),
             ("flash.geom", "Matrix", matrix),
             ("flash.geom", "Matrix3D", matrix3d),
+            ("flash.geom", "PerspectiveProjection", perspectiveprojection),
             ("flash.geom", "Point", point),
             ("flash.geom", "Rectangle", rectangle),
             ("flash.geom", "Transform", transform),
@@ -975,6 +982,7 @@ pub fn init_native_system_classes(activation: &mut Activation<'_, '_>) {
         [
             ("flash.display", "Bitmap", bitmap),
             ("flash.display", "BitmapData", bitmapdata),
+            ("flash.display", "DisplayObject", display_object),
             ("flash.display", "IGraphicsData", igraphicsdata),
             ("flash.display", "GraphicsBitmapFill", graphicsbitmapfill),
             ("flash.display", "GraphicsEndFill", graphicsendfill),
@@ -991,12 +999,14 @@ pub fn init_native_system_classes(activation: &mut Activation<'_, '_>) {
             ),
             ("flash.display", "GraphicsSolidFill", graphicssolidfill),
             ("flash.display", "GraphicsStroke", graphicsstroke),
+            ("flash.display", "Sprite", sprite),
             ("flash.display3D.textures", "CubeTexture", cubetexture),
             (
                 "flash.display3D.textures",
                 "RectangleTexture",
                 rectangletexture
             ),
+            ("flash.ui", "ContextMenuItem", contextmenuitem),
         ]
     );
 }

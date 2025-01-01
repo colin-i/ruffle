@@ -145,10 +145,7 @@ pub fn domain<'gc>(
     let movie = activation.base_clip().movie();
     let domain = LocalConnections::get_domain(movie.url());
 
-    Ok(Value::String(AvmString::new_utf8(
-        activation.context.gc_context,
-        domain,
-    )))
+    Ok(Value::String(AvmString::new_utf8(activation.gc(), domain)))
 }
 
 pub fn connect<'gc>(
@@ -249,7 +246,7 @@ pub fn create_proto<'gc>(
     proto: Object<'gc>,
     fn_proto: Object<'gc>,
 ) -> Object<'gc> {
-    let object = ScriptObject::new(context.gc_context, Some(proto));
+    let object = ScriptObject::new(context.gc(), Some(proto));
     define_properties_on(PROTO_DECLS, context, object, fn_proto);
     object.into()
 }

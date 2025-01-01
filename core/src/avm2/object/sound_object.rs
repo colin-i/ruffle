@@ -1,6 +1,7 @@
 //! Object representation for sounds
 
 use crate::avm2::activation::Activation;
+use crate::avm2::globals::slots::flash_media_id3info as id3_slots;
 use crate::avm2::object::script_object::ScriptObjectData;
 use crate::avm2::object::{ClassObject, Object, ObjectPtr, TObject};
 use crate::avm2::Avm2;
@@ -30,7 +31,7 @@ pub fn sound_allocator<'gc>(
     let base = ScriptObjectData::new(class);
 
     Ok(SoundObject(Gc::new(
-        activation.context.gc_context,
+        activation.gc(),
         SoundObjectData {
             base,
             sound_data: RefLock::new(SoundData::NotLoaded {
@@ -115,7 +116,7 @@ impl<'gc> SoundObject<'gc> {
         activation: &mut Activation<'_, 'gc>,
     ) -> Result<bool, Error<'gc>> {
         let mut sound_data = unlock!(
-            Gc::write(activation.context.gc_context, self.0),
+            Gc::write(activation.gc(), self.0),
             SoundObjectData,
             sound_data
         )
@@ -141,12 +142,8 @@ impl<'gc> SoundObject<'gc> {
         context: &mut UpdateContext<'gc>,
         sound: SoundHandle,
     ) -> Result<(), Error<'gc>> {
-        let mut sound_data = unlock!(
-            Gc::write(context.gc_context, self.0),
-            SoundObjectData,
-            sound_data
-        )
-        .borrow_mut();
+        let mut sound_data =
+            unlock!(Gc::write(context.gc(), self.0), SoundObjectData, sound_data).borrow_mut();
         let mut activation = Activation::from_nothing(context);
         match &mut *sound_data {
             SoundData::NotLoaded { queued_plays } => {
@@ -180,63 +177,63 @@ impl<'gc> SoundObject<'gc> {
         let tag = Tag::read_from2(Cursor::new(bytes));
         if let Ok(ref tag) = tag {
             if let Some(v) = tag.album() {
-                id3.set_public_property(
-                    "album",
+                id3.set_slot(
+                    id3_slots::ALBUM,
                     AvmString::new_utf8(activation.gc(), v).into(),
                     activation,
                 )
-                .expect("failed set_public_property");
+                .expect("slot is typed String");
             }
             if let Some(v) = tag.artist() {
-                id3.set_public_property(
-                    "artist",
+                id3.set_slot(
+                    id3_slots::ARTIST,
                     AvmString::new_utf8(activation.gc(), v).into(),
                     activation,
                 )
-                .expect("failed set_public_property");
+                .expect("slot is typed String");
             }
             if let Some(v) = tag.comments().next() {
-                id3.set_public_property(
-                    "comment",
+                id3.set_slot(
+                    id3_slots::COMMENT,
                     AvmString::new_utf8(activation.gc(), v.text.clone()).into(),
                     activation,
                 )
-                .expect("failed set_public_property");
+                .expect("slot is typed String");
             }
             if let Some(v) = tag.genre() {
-                id3.set_public_property(
-                    "genre",
+                id3.set_slot(
+                    id3_slots::GENRE,
                     AvmString::new_utf8(activation.gc(), v).into(),
                     activation,
                 )
-                .expect("failed set_public_property");
+                .expect("slot is typed String");
             }
             if let Some(v) = tag.title() {
-                id3.set_public_property(
-                    "songName",
+                id3.set_slot(
+                    id3_slots::SONG_NAME,
                     AvmString::new_utf8(activation.gc(), v).into(),
                     activation,
                 )
-                .expect("failed set_public_property");
+                .expect("slot is typed String");
             }
             if let Some(v) = tag.track() {
-                id3.set_public_property(
-                    "track",
+                id3.set_slot(
+                    id3_slots::TRACK,
                     AvmString::new_utf8(activation.gc(), v.to_string()).into(),
                     activation,
                 )
-                .expect("failed set_public_property");
+                .expect("slot is typed String");
             }
             if let Some(v) = tag.year() {
-                id3.set_public_property(
-                    "year",
+                id3.set_slot(
+                    id3_slots::YEAR,
                     AvmString::new_utf8(activation.gc(), v.to_string()).into(),
                     activation,
                 )
-                .expect("failed set_public_property");
+                .expect("slot is typed String");
             }
         }
-        self.set_id3(activation.context.gc_context, Some(id3));
+        self.set_id3(activation.gc(), Some(id3));
         if tag.is_ok() {
             let id3_evt = EventObject::bare_default_event(activation.context, "id3");
             Avm2::dispatch_event(activation.context, id3_evt, self.into());

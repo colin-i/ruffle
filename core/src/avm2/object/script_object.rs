@@ -25,7 +25,7 @@ pub fn scriptobject_allocator<'gc>(
 ) -> Result<Object<'gc>, Error<'gc>> {
     let base = ScriptObjectData::new(class);
 
-    Ok(ScriptObject(Gc::new(activation.context.gc_context, base)).into())
+    Ok(ScriptObject(Gc::new(activation.gc(), base)).into())
 }
 
 /// Default implementation of `avm2::Object`.
@@ -86,18 +86,30 @@ fn maybe_int_property(name: AvmString<'_>) -> DynamicKey<'_> {
 }
 
 impl<'gc> ScriptObject<'gc> {
+    /// Creates an instance of the Object class, exactly as if `new Object()`
+    /// were called, but without going through any construction or call
+    /// machinery (since it's unnecessary for the Object class).
+    pub fn new_object(activation: &mut Activation<'_, 'gc>) -> Object<'gc> {
+        let object_class = activation.avm2().classes().object;
+
+        ScriptObject(Gc::new(
+            activation.gc(),
+            ScriptObjectData::new(object_class),
+        ))
+        .into()
+    }
+
     /// Construct an instance with a possibly-none class and proto chain.
     /// NOTE: this is a low-level function.
     /// This should *not* be used unless you really need
     /// to do something low-level, weird or lazily initialize the object.
     /// You shouldn't let scripts observe this weirdness.
     ///
-    /// The "everyday" way to create a normal empty ScriptObject (AS "Object") is to call
-    /// `avm2.classes().object.construct(self, &[])`.
-    /// This is equivalent to AS3 `new Object()`.
+    /// The proper way to create a normal empty ScriptObject (AS "Object") is to call
+    /// `ScriptObject::new_object(activation)`.
     ///
-    /// (calling `custom_object(mc, object_class, object_class.prototype()`)
-    /// is technically also equivalent and faster, but not recommended outside lower-level Core code)
+    /// Calling `custom_object(mc, object_class, object_class.prototype()` is
+    /// technically also equivalent, but not recommended outside VM initialization code
     pub fn custom_object(
         mc: &Mutation<'gc>,
         class: Class<'gc>,
@@ -114,7 +126,7 @@ impl<'gc> ScriptObject<'gc> {
     /// A special case for `newcatch` implementation. Basically a variable (q)name
     /// which maps to slot 1.
     pub fn catch_scope(activation: &mut Activation<'_, 'gc>, qname: &QName<'gc>) -> Object<'gc> {
-        let mc = activation.context.gc_context;
+        let mc = activation.gc();
 
         let vt = VTable::newcatch(mc, qname);
 
@@ -365,10 +377,11 @@ impl<'gc> ScriptObjectWrapper<'gc> {
         unlock!(Gc::write(mc, self.0), ScriptObjectData, proto).set(Some(proto));
     }
 
-    pub fn get_next_enumerant(&self, last_index: u32) -> Option<u32> {
+    pub fn get_next_enumerant(&self, last_index: u32) -> u32 {
         self.values()
             .next(last_index as usize)
             .map(|val| val as u32)
+            .unwrap_or(0)
     }
 
     pub fn get_enumerant_name(&self, index: u32) -> Option<Value<'gc>> {

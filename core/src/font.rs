@@ -208,6 +208,7 @@ impl FontFace {
                             shape_handle: Default::default(),
                             shape: GlyphShape::Drawing(drawing),
                             advance,
+                            character,
                         })
                     } else {
                         let advance = Twips::new(face.glyph_hor_advance(glyph_id)? as i32);
@@ -216,6 +217,7 @@ impl FontFace {
                             shape_handle: Default::default(),
                             shape: GlyphShape::None,
                             advance,
+                            character,
                         })
                     }
                 })
@@ -409,12 +411,16 @@ impl<'gc> Font<'gc> {
             .enumerate()
             .map(|(index, swf_glyph)| {
                 let code = swf_glyph.code;
+                // TODO: Flash doesn't care whether it's a surrogate code point or not.
+                //   We should probably rethink using Rust's char for Flash characters.
+                let character = char::from_u32(code as u32).unwrap_or(char::REPLACEMENT_CHARACTER);
                 code_point_to_glyph.insert(code, index);
 
                 let glyph = Glyph {
                     shape_handle: None.into(),
                     advance: Twips::new(swf_glyph.advance.into()),
                     shape: GlyphShape::Swf(RefCell::new(SwfGlyphOrShape::Glyph(swf_glyph))),
+                    character,
                 };
 
                 // Eager-load ASCII characters.
@@ -478,19 +484,37 @@ impl<'gc> Font<'gc> {
                 FontType::EmbeddedCFF,
             )
         } else {
-            Ok(Font(Gc::new(
+            Ok(Self::empty_font(
                 gc_context,
-                FontData {
-                    scale: 1.0,
-                    ascent: 0,
-                    descent: 0,
-                    leading: 0,
-                    glyphs: GlyphSource::Empty,
-                    descriptor,
-                    font_type: FontType::EmbeddedCFF,
-                },
-            )))
+                &name,
+                tag.is_bold,
+                tag.is_italic,
+                FontType::EmbeddedCFF,
+            ))
         }
+    }
+
+    pub fn empty_font(
+        gc_context: &Mutation<'gc>,
+        name: &str,
+        is_bold: bool,
+        is_italic: bool,
+        font_type: FontType,
+    ) -> Font<'gc> {
+        let descriptor = FontDescriptor::from_parts(name, is_bold, is_italic);
+
+        Font(Gc::new(
+            gc_context,
+            FontData {
+                scale: 1.0,
+                ascent: 0,
+                descent: 0,
+                leading: 0,
+                glyphs: GlyphSource::Empty,
+                descriptor,
+                font_type,
+            },
+        ))
     }
 
     /// Returns whether this font contains glyph shapes.
@@ -788,6 +812,9 @@ pub struct Glyph {
 
     shape: GlyphShape,
     advance: Twips,
+
+    // The character this glyph represents.
+    character: char,
 }
 
 impl Glyph {
@@ -804,6 +831,10 @@ impl Glyph {
 
     pub fn advance(&self) -> Twips {
         self.advance
+    }
+
+    pub fn character(&self) -> char {
+        self.character
     }
 }
 

@@ -651,7 +651,7 @@ impl<'gc> Value<'gc> {
                     activation,
                     &format!(
                         "Error #1050: Cannot convert {} to primitive.",
-                        o.instance_of_class_name(activation.context.gc_context)
+                        o.instance_of_class_name(activation.gc())
                     ),
                     1050,
                 )?))
@@ -673,7 +673,7 @@ impl<'gc> Value<'gc> {
                     activation,
                     &format!(
                         "Error #1050: Cannot convert {} to primitive.",
-                        o.instance_of_class_name(activation.context.gc_context)
+                        o.instance_of_class_name(activation.gc())
                     ),
                     1050,
                 )?))
@@ -790,7 +790,7 @@ impl<'gc> Value<'gc> {
             Value::Number(n) if n.is_nan() => "NaN".into(),
             Value::Number(n) if *n == 0.0 => "0".into(),
             Value::Number(n) if *n < 0.0 => AvmString::new_utf8(
-                activation.context.gc_context,
+                activation.gc(),
                 format!("-{}", Value::Number(-n).coerce_to_string(activation)?),
             ),
             Value::Number(n) if n.is_infinite() => "Infinity".into(),
@@ -804,7 +804,7 @@ impl<'gc> Value<'gc> {
 
                 if digits < Self::MIN_DIGITS || digits >= Self::MAX_DIGITS {
                     AvmString::new_utf8(
-                        activation.context.gc_context,
+                        activation.gc(),
                         format!(
                             "{}e{}{}",
                             precision / 10.0_f64.powf(digits),
@@ -813,14 +813,14 @@ impl<'gc> Value<'gc> {
                         ),
                     )
                 } else {
-                    AvmString::new_utf8(activation.context.gc_context, n.to_string())
+                    AvmString::new_utf8(activation.gc(), n.to_string())
                 }
             }
             Value::Integer(i) => {
                 if *i >= 0 && *i < 10 {
                     activation.strings().make_char('0' as u16 + *i as u16)
                 } else {
-                    AvmString::new_utf8(activation.context.gc_context, i.to_string())
+                    AvmString::new_utf8(activation.gc(), i.to_string())
                 }
             }
             Value::String(s) => *s,
@@ -841,9 +841,7 @@ impl<'gc> Value<'gc> {
         activation: &mut Activation<'_, 'gc>,
     ) -> Result<AvmString<'gc>, Error<'gc>> {
         Ok(match self {
-            Value::String(s) => {
-                AvmString::new_utf8(activation.context.gc_context, format!("\"{s}\""))
-            }
+            Value::String(s) => AvmString::new_utf8(activation.gc(), format!("\"{s}\"")),
             Value::Object(_) => self
                 .coerce_to_primitive(Some(Hint::String), activation)?
                 .coerce_to_debug_string(activation)?,
@@ -1004,9 +1002,7 @@ impl<'gc> Value<'gc> {
             }
         }
 
-        let name = class
-            .name()
-            .to_qualified_name_err_message(activation.context.gc_context);
+        let name = class.name().to_qualified_name_err_message(activation.gc());
 
         let debug_str = match self {
             Value::Object(obj) if obj.as_primitive().is_none() => {
@@ -1016,7 +1012,7 @@ impl<'gc> Value<'gc> {
                 // application is trying to parse the error message.
                 format!(
                     "{}@00000000000",
-                    obj.instance_of_class_name(activation.context.gc_context)
+                    obj.instance_of_class_name(activation.gc())
                 )
             }
             _ => self.coerce_to_debug_string(activation)?.to_string(),
@@ -1103,9 +1099,9 @@ impl<'gc> Value<'gc> {
         }
     }
 
-    /// Get the class that this value is of, supporting primitives.
-    /// This function will panic if passed Value::Null or Value::Undefined to;
-    /// make sure to handle them with `null_check` or similar beforehand.
+    /// Get the class that this Value is of.
+    ///
+    /// This function will panic if called on null or undefined.
     pub fn instance_class(&self, activation: &mut Activation<'_, 'gc>) -> Class<'gc> {
         let class_defs = activation.avm2().class_defs();
 
@@ -1121,10 +1117,65 @@ impl<'gc> Value<'gc> {
         }
     }
 
+    /// Get the prototype object corresponding to this Value's type.
+    ///
+    /// This function will panic if called on null or undefined.
+    pub fn proto(&self, activation: &mut Activation<'_, 'gc>) -> Option<Object<'gc>> {
+        let classes = activation.avm2().classes();
+
+        match self {
+            Value::Bool(_) => Some(classes.boolean.prototype()),
+            Value::Number(_) | Value::Integer(_) => Some(classes.number.prototype()),
+            Value::String(_) => Some(classes.string.prototype()),
+            Value::Object(obj) => obj.proto(),
+
+            Value::Undefined | Value::Null => {
+                unreachable!("Should not have Undefined or Null in `proto`")
+            }
+        }
+    }
+
     pub fn instance_of_class_name(&self, activation: &mut Activation<'_, 'gc>) -> AvmString<'gc> {
         self.instance_class(activation)
             .name()
             .to_qualified_name(activation.gc())
+    }
+
+    /// Determine if this value is an instance of a given type.
+    ///
+    /// This uses the ES3 definition of instance, which walks the prototype
+    /// chain. For the ES4 definition of instance, use `is_of_type`, which uses
+    /// the class object chain and accounts for interfaces.
+    ///
+    /// The given object should be the class object for the given type we are
+    /// checking against this object. Its prototype will be extracted and
+    /// searched in the prototype chain of this object.
+    ///
+    /// This function will panic if called on null or undefined.
+    pub fn is_instance_of(
+        &self,
+        activation: &mut Activation<'_, 'gc>,
+        class_or_function_object: Object<'gc>,
+    ) -> bool {
+        let type_proto = match class_or_function_object {
+            Object::ClassObject(class_object) => Some(class_object.prototype()),
+            Object::FunctionObject(function_object) => function_object.prototype(),
+            _ => panic!("Object must be either ClassObject or FunctionObject"),
+        };
+
+        if let Some(type_proto) = type_proto {
+            let mut my_proto = self.proto(activation);
+
+            while let Some(proto) = my_proto {
+                if Object::ptr_eq(proto, type_proto) {
+                    return true;
+                }
+
+                my_proto = proto.proto();
+            }
+        }
+
+        false
     }
 
     /// Implements the strict-equality `===` check for AVM2.

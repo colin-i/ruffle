@@ -64,7 +64,7 @@ pub fn make_null_or_undefined_error<'gc>(
         if let Some(name) = name {
             msg.push_str(&format!(
                 " (accessing field: {})",
-                name.to_qualified_name(activation.context.gc_context)
+                name.to_qualified_name(activation.gc())
             ));
         }
         match error_constructor(activation, class, &msg, 1009) {
@@ -94,7 +94,7 @@ pub fn make_reference_error<'gc>(
     let qualified_name = multiname.as_uri(activation.strings());
     let class_name = object_class
         .name()
-        .to_qualified_name_err_message(activation.context.gc_context);
+        .to_qualified_name_err_message(activation.gc());
 
     let msg = match code {
         ReferenceErrorCode::AssignToMethod => format!(
@@ -183,7 +183,7 @@ pub fn make_error_1010<'gc>(
     if let Some(name) = name {
         msg.push_str(&format!(
             " (accessing field: {})",
-            name.to_qualified_name(activation.context.gc_context)
+            name.to_qualified_name(activation.gc())
         ));
     }
     let error = type_error(activation, &msg, 1010);
@@ -193,18 +193,23 @@ pub fn make_error_1010<'gc>(
     }
 }
 
+pub enum Error1014Type {
+    ReferenceError,
+    VerifyError,
+}
+
 #[inline(never)]
 #[cold]
 pub fn make_error_1014<'gc>(
     activation: &mut Activation<'_, 'gc>,
+    kind: Error1014Type,
     class_name: AvmString<'gc>,
 ) -> Error<'gc> {
-    let err = verify_error(
-        activation,
-        &format!("Error #1014: Class {} could not be found.", class_name),
-        1014,
-    );
-
+    let message = &format!("Error #1014: Class {} could not be found.", class_name);
+    let err = match kind {
+        Error1014Type::ReferenceError => reference_error(activation, message, 1014),
+        Error1014Type::VerifyError => verify_error(activation, message, 1014),
+    };
     match err {
         Ok(err) => Error::AvmError(err),
         Err(err) => err,
@@ -505,11 +510,10 @@ pub fn make_error_2004<'gc>(
     kind: Error2004Type,
 ) -> Error<'gc> {
     let message = "Error #2004: One of the parameters is invalid.";
-    let code = 2004;
     let err = match kind {
-        Error2004Type::Error => error(activation, message, code),
-        Error2004Type::ArgumentError => argument_error(activation, message, code),
-        Error2004Type::TypeError => type_error(activation, message, code),
+        Error2004Type::Error => error(activation, message, 2004),
+        Error2004Type::ArgumentError => argument_error(activation, message, 2004),
+        Error2004Type::TypeError => type_error(activation, message, 2004),
     };
     match err {
         Ok(err) => Error::AvmError(err),
@@ -830,7 +834,7 @@ fn error_constructor<'gc>(
     message: &str,
     code: u32,
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let message = AvmString::new_utf8(activation.context.gc_context, message);
+    let message = AvmString::new_utf8(activation.gc(), message);
     Ok(class
         .construct(activation, &[message.into(), code.into()])?
         .into())

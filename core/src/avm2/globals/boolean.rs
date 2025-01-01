@@ -12,10 +12,12 @@ use crate::avm2::QName;
 /// Implements `Boolean`'s instance initializer.
 fn instance_init<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    if let Some(mut prim) = this.as_primitive_mut(activation.context.gc_context) {
+    let this = this.as_object().unwrap();
+
+    if let Some(mut prim) = this.as_primitive_mut(activation.gc()) {
         if matches!(*prim, Value::Undefined | Value::Null) {
             *prim = args
                 .get(0)
@@ -32,11 +34,13 @@ fn instance_init<'gc>(
 /// Implements `Boolean`'s class initializer.
 fn class_init<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     let scope = activation.create_scopechain();
-    let gc_context = activation.context.gc_context;
+    let gc_context = activation.gc();
     let this_class = this.as_class_object().unwrap();
     let boolean_proto = this_class.prototype();
 
@@ -74,7 +78,7 @@ fn class_init<'gc>(
 
 pub fn call_handler<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     Ok(args
@@ -88,9 +92,11 @@ pub fn call_handler<'gc>(
 /// Implements `Boolean.prototype.toString`
 fn to_string<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(this) = this.as_primitive() {
         match *this {
             Value::Bool(true) => return Ok("true".into()),
@@ -110,9 +116,11 @@ fn to_string<'gc>(
 /// Implements `Boolean.valueOf`
 fn value_of<'gc>(
     _activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     if let Some(this) = this.as_primitive() {
         return Ok(*this);
     }
@@ -148,14 +156,14 @@ pub fn create_class<'gc>(activation: &mut Activation<'_, 'gc>) -> Class<'gc> {
     const CONSTANTS_INT: &[(&str, i32)] = &[("length", 1)];
     class.define_constant_int_class_traits(namespaces.public_all(), CONSTANTS_INT, activation);
 
-    class.mark_traits_loaded(activation.context.gc_context);
+    class.mark_traits_loaded(activation.gc());
     class
         .init_vtable(activation.context)
         .expect("Native class's vtable should initialize");
 
     let c_class = class.c_class().expect("Class::new returns an i_class");
 
-    c_class.mark_traits_loaded(activation.context.gc_context);
+    c_class.mark_traits_loaded(activation.gc());
     c_class
         .init_vtable(activation.context)
         .expect("Native class's vtable should initialize");

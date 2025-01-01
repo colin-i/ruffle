@@ -17,11 +17,7 @@ pub fn proxy_allocator<'gc>(
 ) -> Result<Object<'gc>, Error<'gc>> {
     let base = ScriptObjectData::new(class);
 
-    Ok(ProxyObject(Gc::new(
-        activation.context.gc_context,
-        ProxyObjectData { base },
-    ))
-    .into())
+    Ok(ProxyObject(Gc::new(activation.gc(), ProxyObjectData { base })).into())
 }
 
 #[derive(Clone, Collect, Copy)]
@@ -149,12 +145,11 @@ impl<'gc> TObject<'gc> for ProxyObject<'gc> {
         self,
         last_index: u32,
         activation: &mut Activation<'_, 'gc>,
-    ) -> Result<Option<u32>, Error<'gc>> {
+    ) -> Result<u32, Error<'gc>> {
         let prop = Multiname::new(activation.avm2().namespaces.proxy, "nextNameIndex");
-        Ok(Some(
-            self.call_property(&prop, &[last_index.into()], activation)?
-                .coerce_to_u32(activation)?,
-        ))
+
+        self.call_property(&prop, &[last_index.into()], activation)?
+            .coerce_to_u32(activation)
     }
 
     fn get_enumerant_name(

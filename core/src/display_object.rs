@@ -797,6 +797,24 @@ impl<'gc> DisplayObjectBase<'gc> {
     fn set_meta_data(&mut self, value: Avm2Object<'gc>) {
         self.meta_data = Some(value);
     }
+
+    pub fn has_matrix3d_stub(&self) -> bool {
+        self.flags.contains(DisplayObjectFlags::HAS_MATRIX3D_STUB)
+    }
+
+    pub fn set_has_matrix3d_stub(&mut self, value: bool) {
+        self.flags.set(DisplayObjectFlags::HAS_MATRIX3D_STUB, value)
+    }
+
+    pub fn has_perspective_projection_stub(&self) -> bool {
+        self.flags
+            .contains(DisplayObjectFlags::HAS_PERSPECTIVE_PROJECTION_STUB)
+    }
+
+    pub fn set_has_perspective_projection_stub(&mut self, value: bool) {
+        self.flags
+            .set(DisplayObjectFlags::HAS_PERSPECTIVE_PROJECTION_STUB, value)
+    }
 }
 
 struct DrawCacheInfo {
@@ -833,7 +851,7 @@ pub fn render_base<'gc>(this: DisplayObject<'gc>, context: &mut RenderContext<'_
         let swf_version = this.swf_version();
         filters.retain(|f| !f.impotent());
 
-        if let Some(cache) = this.base_mut(context.gc_context).bitmap_cache_mut() {
+        if let Some(cache) = this.base_mut(context.gc()).bitmap_cache_mut() {
             let width = bounds.width().to_pixels().ceil().max(0.0);
             let height = bounds.height().to_pixels().ceil().max(0.0);
             if width <= u16::MAX as f64 && height <= u16::MAX as f64 {
@@ -1427,7 +1445,7 @@ pub trait TDisplayObject<'gc>:
     /// Set by the ActionScript `_width`/`width` properties.
     /// This does odd things on rotated clips to match the behavior of Flash.
     fn set_width(&self, context: &mut UpdateContext<'gc>, value: f64) {
-        let gc_context = context.gc_context;
+        let gc_context = context.gc();
         let object_bounds = self.bounds();
         let object_width = object_bounds.width().to_pixels();
         let object_height = object_bounds.height().to_pixels();
@@ -1475,7 +1493,7 @@ pub trait TDisplayObject<'gc>:
     /// Set by the ActionScript `_height`/`height` properties.
     /// This does odd things on rotated clips to match the behavior of Flash.
     fn set_height(&self, context: &mut UpdateContext<'gc>, value: f64) {
-        let gc_context = context.gc_context;
+        let gc_context = context.gc();
         let object_bounds = self.bounds();
         let object_width = object_bounds.width().to_pixels();
         let object_height = object_bounds.height().to_pixels();
@@ -1612,7 +1630,7 @@ pub trait TDisplayObject<'gc>:
     /// Set the parent of this display object.
     fn set_parent(&self, context: &mut UpdateContext<'gc>, parent: Option<DisplayObject<'gc>>) {
         let had_parent = self.parent().is_some();
-        self.base_mut(context.gc_context)
+        self.base_mut(context.gc())
             .set_parent_ignoring_orphan_list(parent);
         let has_parent = self.parent().is_some();
         let parent_removed = had_parent && !has_parent;
@@ -1834,7 +1852,7 @@ pub trait TDisplayObject<'gc>:
         context: &mut UpdateContext<'gc>,
         sound_transform: SoundTransform,
     ) {
-        self.base_mut(context.gc_context)
+        self.base_mut(context.gc())
             .set_sound_transform(sound_transform);
         context.set_sound_transforms_dirty();
     }
@@ -1997,7 +2015,7 @@ pub trait TDisplayObject<'gc>:
             if !obj.is_of_type(movieclip_class) && !movie.is_root() {
                 movie.stop(context);
             }
-            movie.set_initialized(context.gc_context);
+            movie.set_initialized(context.gc());
         }
     }
 
@@ -2077,7 +2095,7 @@ pub trait TDisplayObject<'gc>:
     /// Note that this happens even if the child is invisible
     /// (as long as the child is still on a render list)
     fn pre_render(&self, context: &mut RenderContext<'_, 'gc>) {
-        let mut this = self.base_mut(context.gc_context);
+        let mut this = self.base_mut(context.gc());
         this.clear_invalidate_flag();
         this.scroll_rect = this
             .has_scroll_rect()
@@ -2135,9 +2153,9 @@ pub trait TDisplayObject<'gc>:
         }
 
         if let Some(node) = self.maskee() {
-            node.set_masker(context.gc_context, None, true);
+            node.set_masker(context.gc(), None, true);
         } else if let Some(node) = self.masker() {
-            node.set_maskee(context.gc_context, None, true);
+            node.set_maskee(context.gc(), None, true);
         }
 
         // Unregister any text field variable bindings, and replace them on the unbound list.
@@ -2147,7 +2165,7 @@ pub trait TDisplayObject<'gc>:
             }
         }
 
-        self.set_avm1_removed(context.gc_context, true);
+        self.set_avm1_removed(context.gc(), true);
     }
 
     fn as_stage(&self) -> Option<Stage<'gc>> {
@@ -2163,6 +2181,9 @@ pub trait TDisplayObject<'gc>:
         None
     }
     fn as_edit_text(&self) -> Option<EditText<'gc>> {
+        None
+    }
+    fn as_text(&self) -> Option<Text<'gc>> {
         None
     }
     fn as_morph_shape(&self) -> Option<MorphShape<'gc>> {
@@ -2192,31 +2213,31 @@ pub trait TDisplayObject<'gc>:
         // PlaceObject tags only apply if this object has not been dynamically moved by AS code.
         if !self.transformed_by_script() {
             if let Some(matrix) = place_object.matrix {
-                self.set_matrix(context.gc_context, matrix.into());
+                self.set_matrix(context.gc(), matrix.into());
                 if let Some(parent) = self.parent() {
                     // Self-transform changes are automatically handled,
                     // we only want to inform ancestors to avoid unnecessary invalidations for tx/ty
-                    parent.invalidate_cached_bitmap(context.gc_context);
+                    parent.invalidate_cached_bitmap(context.gc());
                 }
             }
             if let Some(color_transform) = &place_object.color_transform {
-                self.set_color_transform(context.gc_context, *color_transform);
+                self.set_color_transform(context.gc(), *color_transform);
                 if let Some(parent) = self.parent() {
-                    parent.invalidate_cached_bitmap(context.gc_context);
+                    parent.invalidate_cached_bitmap(context.gc());
                 }
             }
             if let Some(ratio) = place_object.ratio {
                 if let Some(mut morph_shape) = self.as_morph_shape() {
-                    morph_shape.set_ratio(context.gc_context, ratio);
+                    morph_shape.set_ratio(context.gc(), ratio);
                 } else if let Some(video) = self.as_video() {
                     video.seek(context, ratio.into());
                 }
             }
             if let Some(is_bitmap_cached) = place_object.is_bitmap_cached {
-                self.set_bitmap_cached_preference(context.gc_context, is_bitmap_cached);
+                self.set_bitmap_cached_preference(context.gc(), is_bitmap_cached);
             }
             if let Some(blend_mode) = place_object.blend_mode {
-                self.set_blend_mode(context.gc_context, blend_mode.into());
+                self.set_blend_mode(context.gc(), blend_mode.into());
             }
             if self.swf_version() >= 11 {
                 if let Some(visible) = place_object.is_visible {
@@ -2230,14 +2251,11 @@ pub trait TDisplayObject<'gc>:
                     } else {
                         None
                     };
-                    self.set_opaque_background(context.gc_context, color);
+                    self.set_opaque_background(context.gc(), color);
                 }
             }
             if let Some(filters) = &place_object.filters {
-                self.set_filters(
-                    context.gc_context,
-                    filters.iter().map(Filter::from).collect(),
-                );
+                self.set_filters(context.gc(), filters.iter().map(Filter::from).collect());
             }
             // Purposely omitted properties:
             // name, clip_depth, clip_actions
@@ -2433,10 +2451,7 @@ pub trait TDisplayObject<'gc>:
     fn set_default_instance_name(&self, context: &mut UpdateContext<'gc>) {
         if self.base().name().is_none() {
             let name = format!("instance{}", *context.instance_counter);
-            self.set_name(
-                context.gc_context,
-                AvmString::new_utf8(context.gc_context, name),
-            );
+            self.set_name(context.gc(), AvmString::new_utf8(context.gc(), name));
             *context.instance_counter = context.instance_counter.wrapping_add(1);
         }
     }
@@ -2447,10 +2462,10 @@ pub trait TDisplayObject<'gc>:
     /// clip; AVM2 clips get `rootN` while AVM1 clips get blank strings.
     fn set_default_root_name(&self, context: &mut UpdateContext<'gc>) {
         if self.movie().is_action_script_3() {
-            let name = AvmString::new_utf8(context.gc_context, format!("root{}", self.depth() + 1));
-            self.set_name(context.gc_context, name);
+            let name = AvmString::new_utf8(context.gc(), format!("root{}", self.depth() + 1));
+            self.set_name(context.gc(), name);
         } else {
-            self.set_name(context.gc_context, Default::default());
+            self.set_name(context.gc(), Default::default());
         }
     }
 
@@ -2606,6 +2621,12 @@ bitflags! {
 
         /// If this AVM1 object is pending removal (will be removed on the next frame).
         const AVM1_PENDING_REMOVAL     = 1 << 13;
+
+        /// Whether this object has matrix3D (used for stubbing).
+        const HAS_MATRIX3D_STUB        = 1 << 14;
+
+        /// Whether this object has perspectiveProjection (used for stubbing).
+        const HAS_PERSPECTIVE_PROJECTION_STUB = 1 << 15;
     }
 }
 
@@ -2699,32 +2720,18 @@ impl SoundTransform {
         self.right_to_left = 0;
     }
 
-    pub fn from_avm2_object<'gc>(
-        activation: &mut Avm2Activation<'_, 'gc>,
-        as3_st: Avm2Object<'gc>,
-    ) -> Result<Self, Avm2Error<'gc>> {
-        Ok(SoundTransform {
-            left_to_left: (as3_st
-                .get_public_property("leftToLeft", activation)?
-                .coerce_to_number(activation)?
-                * 100.0) as i32,
-            left_to_right: (as3_st
-                .get_public_property("leftToRight", activation)?
-                .coerce_to_number(activation)?
-                * 100.0) as i32,
-            right_to_left: (as3_st
-                .get_public_property("rightToLeft", activation)?
-                .coerce_to_number(activation)?
-                * 100.0) as i32,
-            right_to_right: (as3_st
-                .get_public_property("rightToRight", activation)?
-                .coerce_to_number(activation)?
-                * 100.0) as i32,
-            volume: (as3_st
-                .get_public_property("volume", activation)?
-                .coerce_to_number(activation)?
-                * 100.0) as i32,
-        })
+    pub fn from_avm2_object(as3_st: Avm2Object<'_>) -> Self {
+        let sound_transform = as3_st
+            .as_sound_transform()
+            .expect("Should pass SoundTransform");
+
+        SoundTransform {
+            left_to_left: (sound_transform.left_to_left() * 100.0) as i32,
+            left_to_right: (sound_transform.left_to_right() * 100.0) as i32,
+            right_to_left: (sound_transform.right_to_left() * 100.0) as i32,
+            right_to_right: (sound_transform.right_to_right() * 100.0) as i32,
+            volume: (sound_transform.volume() * 100.0) as i32,
+        }
     }
 
     pub fn into_avm2_object<'gc>(
@@ -2735,31 +2742,17 @@ impl SoundTransform {
             .avm2()
             .classes()
             .soundtransform
-            .construct(activation, &[])?;
+            .construct(activation, &[])?
+            .as_sound_transform()
+            .unwrap();
 
-        as3_st.set_public_property(
-            "leftToLeft",
-            (self.left_to_left as f64 / 100.0).into(),
-            activation,
-        )?;
-        as3_st.set_public_property(
-            "leftToRight",
-            (self.left_to_right as f64 / 100.0).into(),
-            activation,
-        )?;
-        as3_st.set_public_property(
-            "rightToLeft",
-            (self.right_to_left as f64 / 100.0).into(),
-            activation,
-        )?;
-        as3_st.set_public_property(
-            "rightToRight",
-            (self.right_to_right as f64 / 100.0).into(),
-            activation,
-        )?;
-        as3_st.set_public_property("volume", (self.volume as f64 / 100.0).into(), activation)?;
+        as3_st.set_left_to_left(self.left_to_left as f64 / 100.0);
+        as3_st.set_left_to_right(self.left_to_right as f64 / 100.0);
+        as3_st.set_right_to_left(self.right_to_left as f64 / 100.0);
+        as3_st.set_right_to_right(self.right_to_right as f64 / 100.0);
+        as3_st.set_volume(self.volume as f64 / 100.0);
 
-        Ok(as3_st)
+        Ok(as3_st.into())
     }
 }
 

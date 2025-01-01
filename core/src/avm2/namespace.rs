@@ -230,7 +230,7 @@ impl<'gc> Namespace<'gc> {
     ) -> Self {
         let atom = context.intern(package_name.into());
         Self(Some(Gc::new(
-            context.gc_context,
+            context.gc(),
             NamespaceData::Namespace(atom, api_version),
         )))
     }
@@ -242,7 +242,7 @@ impl<'gc> Namespace<'gc> {
     ) -> Self {
         let atom = context.intern(package_name.into());
         Self(Some(Gc::new(
-            context.gc_context,
+            context.gc(),
             NamespaceData::PackageInternal(atom),
         )))
     }
@@ -343,11 +343,6 @@ pub struct CommonNamespaces<'gc> {
     pub(super) vector_internal: Namespace<'gc>,
     pub(super) proxy: Namespace<'gc>,
 
-    // These are required to facilitate shared access between Rust and AS.
-    pub(super) flash_utils_internal: Namespace<'gc>,
-    pub(super) flash_events_internal: Namespace<'gc>,
-    pub(super) flash_text_engine_internal: Namespace<'gc>,
-
     pub(super) __ruffle__: Namespace<'gc>,
 }
 
@@ -372,9 +367,6 @@ impl<'gc> CommonNamespaces<'gc> {
                 ApiVersion::AllVersions,
                 context,
             ),
-            flash_utils_internal: Namespace::internal("flash.utils", context),
-            flash_events_internal: Namespace::internal("flash.events", context),
-            flash_text_engine_internal: Namespace::internal("flash.text.engine", context),
 
             __ruffle__: Namespace::package("__ruffle__", ApiVersion::AllVersions, context),
         }

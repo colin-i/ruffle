@@ -307,7 +307,7 @@ impl TextFormat {
     /// Properties defined in both will resolve to the one defined in `self`.
     pub fn mix_with(self, rhs: TextFormat) -> Self {
         Self {
-            font: self.font.or(rhs.font),
+            font: self.font.filter(|f| !f.is_empty()).or(rhs.font),
             size: self.size.or(rhs.size),
             color: self.color.or(rhs.color),
             align: self.align.or(rhs.align),
@@ -424,7 +424,7 @@ impl TextSpanFont {
     }
 
     fn set_text_format(&mut self, tf: &TextFormat) {
-        if let Some(font) = &tf.font {
+        if let Some(font) = tf.font.as_ref().filter(|f| !f.is_empty()) {
             self.face = font.clone();
         }
 
@@ -726,6 +726,8 @@ impl FormatSpans {
                                     format.align = Some(swf::TextAlign::Center)
                                 } else if align == WStr::from_units(b"right") {
                                     format.align = Some(swf::TextAlign::Right)
+                                } else if align == WStr::from_units(b"justify") {
+                                    format.align = Some(swf::TextAlign::Justify)
                                 }
                             }
                         }
@@ -998,6 +1000,11 @@ impl FormatSpans {
 
     pub fn set_default_format(&mut self, tf: TextFormat) {
         self.default_format = tf.mix_with(self.default_format.clone());
+
+        // Empty text always gets the default format.
+        if self.text.is_empty() {
+            self.spans = vec![TextSpan::with_length_and_format(0, &self.default_format)];
+        }
     }
 
     pub fn hide_text(&mut self) {

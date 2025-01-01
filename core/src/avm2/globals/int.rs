@@ -12,10 +12,12 @@ use crate::avm2::{AvmString, Error, QName};
 /// Implements `int`'s instance initializer.
 fn instance_init<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    if let Some(mut prim) = this.as_primitive_mut(activation.context.gc_context) {
+    let this = this.as_object().unwrap();
+
+    if let Some(mut prim) = this.as_primitive_mut(activation.gc()) {
         if matches!(*prim, Value::Undefined | Value::Null) {
             *prim = args
                 .get(0)
@@ -32,11 +34,13 @@ fn instance_init<'gc>(
 /// Implements `int`'s class initializer.
 fn class_init<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     let scope = activation.create_scopechain();
-    let gc_context = activation.context.gc_context;
+    let gc_context = activation.gc();
     let this_class = this.as_class_object().unwrap();
     let int_proto = this_class.prototype();
 
@@ -131,7 +135,7 @@ fn class_init<'gc>(
 
 pub fn call_handler<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    _this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     Ok(args
@@ -154,9 +158,11 @@ use crate::avm2::globals::number::to_precision;
 /// Implements `int.toString`
 fn to_string<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     let int_proto = activation.avm2().classes().int.prototype();
     if Object::ptr_eq(int_proto, this) {
         return Ok("0".into());
@@ -187,15 +193,19 @@ fn to_string<'gc>(
 /// Implements `int.valueOf`
 fn value_of<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    this: Object<'gc>,
+    this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
     let int_proto = activation.avm2().classes().int.prototype();
     if Object::ptr_eq(int_proto, this) {
         return Ok(0.into());
     }
 
-    if let Some(this) = this.as_primitive() {
+    let primitive = this.as_primitive();
+
+    if let Some(this) = primitive {
         match *this {
             Value::Integer(_) => Ok(*this),
             _ => Err(make_error_1004(activation, "int.prototype.valueOf")),
@@ -217,7 +227,7 @@ pub fn create_class<'gc>(activation: &mut Activation<'_, 'gc>) -> Class<'gc> {
             instance_init,
             "<int instance initializer>",
             vec![ParamConfig {
-                param_name: AvmString::new_utf8(activation.context.gc_context, "value"),
+                param_name: AvmString::new_utf8(activation.gc(), "value"),
                 param_type_name: None,
                 default_value: Some(Value::Integer(0)),
             }],
@@ -255,14 +265,14 @@ pub fn create_class<'gc>(activation: &mut Activation<'_, 'gc>) -> Class<'gc> {
     ];
     class.define_builtin_instance_methods(mc, namespaces.as3, AS3_INSTANCE_METHODS);
 
-    class.mark_traits_loaded(activation.context.gc_context);
+    class.mark_traits_loaded(activation.gc());
     class
         .init_vtable(activation.context)
         .expect("Native class's vtable should initialize");
 
     let c_class = class.c_class().expect("Class::new returns an i_class");
 
-    c_class.mark_traits_loaded(activation.context.gc_context);
+    c_class.mark_traits_loaded(activation.gc());
     c_class
         .init_vtable(activation.context)
         .expect("Native class's vtable should initialize");
