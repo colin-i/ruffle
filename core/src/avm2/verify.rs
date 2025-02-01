@@ -326,6 +326,34 @@ pub fn verify_method<'gc>(
                     }
                 }
 
+                AbcOp::CallSuperVoid { index, num_args } => {
+                    // Split this `CallSuperVoid` into a `CallSuper` and a `Pop`;
+                    // this is possible because a `CallSuperVoid` is guaranteed
+                    // to take up at least 2 bytes.
+
+                    // See the comment on GetLex for more information.
+
+                    assert!(bytes_read > 1);
+                    byte_info[previous_position as usize] =
+                        ByteInfo::OpStart(AbcOp::CallSuper { index, num_args });
+                    byte_info[(previous_position + 1) as usize] =
+                        ByteInfo::OpStartNonJumpable(AbcOp::Pop);
+                }
+
+                AbcOp::GetGlobalSlot { index } => {
+                    // Split this `GetGlobalSlot` into a `GetGlobalScope` and a `GetSlot`;
+                    // this is possible because a `GetGlobalSlot` is guaranteed
+                    // to take up at least 2 bytes.
+
+                    // See the comment on GetLex for more information.
+
+                    assert!(bytes_read > 1);
+                    byte_info[previous_position as usize] =
+                        ByteInfo::OpStart(AbcOp::GetGlobalScope);
+                    byte_info[(previous_position + 1) as usize] =
+                        ByteInfo::OpStartNonJumpable(AbcOp::GetSlot { index });
+                }
+
                 AbcOp::GetLex { index } => {
                     let multiname = method
                         .translation_unit()
@@ -882,7 +910,9 @@ fn resolve_op<'gc>(
     op: AbcOp,
 ) -> Result<Op<'gc>, Error<'gc>> {
     Ok(match op {
-        AbcOp::PushByte { value } => Op::PushByte { value: value as i8 },
+        AbcOp::PushByte { value } => Op::PushShort {
+            value: value as i8 as i16,
+        },
         AbcOp::PushDouble { value } => {
             let value = pool_double(activation, translation_unit, value)?;
 
@@ -895,7 +925,7 @@ fn resolve_op<'gc>(
             Op::PushInt { value }
         }
         AbcOp::PushNamespace { value } => Op::PushNamespace { value },
-        AbcOp::PushNaN => Op::PushNaN,
+        AbcOp::PushNaN => Op::PushDouble { value: f64::NAN },
         AbcOp::PushNull => Op::PushNull,
         AbcOp::PushShort { value } => Op::PushShort { value },
         AbcOp::PushString { value } => {
@@ -954,13 +984,8 @@ fn resolve_op<'gc>(
                 num_args,
             }
         }
-        AbcOp::CallSuperVoid { index, num_args } => {
-            let multiname = pool_multiname(activation, translation_unit, index)?;
-
-            Op::CallSuperVoid {
-                multiname,
-                num_args,
-            }
+        AbcOp::CallSuperVoid { .. } => {
+            unreachable!("Verifier emits CallSuper and Pop instead of CallSuperVoid")
         }
         AbcOp::ReturnValue => Op::ReturnValue,
         AbcOp::ReturnVoid => Op::ReturnVoid,
@@ -1001,7 +1026,17 @@ fn resolve_op<'gc>(
         AbcOp::PopScope => Op::PopScope,
         AbcOp::GetOuterScope { index } => Op::GetOuterScope { index },
         AbcOp::GetScopeObject { index } => Op::GetScopeObject { index },
-        AbcOp::GetGlobalScope => Op::GetGlobalScope,
+        AbcOp::GetGlobalScope => {
+            // GetGlobalScope is equivalent to either GetScopeObject or GetOuterScope,
+            // depending on the outer scope stack size. Do this check here in the
+            // verifier instead of doing it at runtime.
+
+            if activation.outer().is_empty() {
+                Op::GetScopeObject { index: 0 }
+            } else {
+                Op::GetOuterScope { index: 0 }
+            }
+        }
         AbcOp::FindDef { index } => {
             let multiname = pool_multiname(activation, translation_unit, index)?;
             // Verifier guarantees that multiname was non-lazy
@@ -1029,7 +1064,9 @@ fn resolve_op<'gc>(
         // Turn 1-based representation into 0-based representation
         AbcOp::GetSlot { index } => Op::GetSlot { index: index - 1 },
         AbcOp::SetSlot { index } => Op::SetSlot { index: index - 1 },
-        AbcOp::GetGlobalSlot { index } => Op::GetGlobalSlot { index: index - 1 },
+        AbcOp::GetGlobalSlot { .. } => {
+            unreachable!("Verifier emits GetGlobalScope and GetSlot instead of GetGlobalSlot")
+        }
         AbcOp::SetGlobalSlot { index } => Op::SetGlobalSlot { index: index - 1 },
 
         AbcOp::Construct { num_args } => Op::Construct { num_args },

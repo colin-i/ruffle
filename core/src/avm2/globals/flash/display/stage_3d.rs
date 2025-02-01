@@ -1,10 +1,8 @@
-use ruffle_render::backend::Context3DProfile;
-
-use crate::avm2::object::Context3DObject;
-use crate::avm2::object::TObject;
-
+use crate::avm2::globals::methods::flash_events_event_dispatcher as event_dispatcher_methods;
+use crate::avm2::object::{Context3DObject, EventObject, TObject};
 use crate::avm2::parameters::ParametersExt;
 use crate::avm2::{Activation, Error, Value};
+use ruffle_render::backend::Context3DProfile;
 
 pub use crate::avm2::object::stage_3d_allocator;
 
@@ -35,9 +33,9 @@ pub fn request_context3d_internal<'gc>(
     this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let this = this.as_object().unwrap();
+    let this_object = this.as_object().unwrap();
 
-    let this_stage3d = this.as_stage_3d().unwrap();
+    let this_stage3d = this_object.as_stage_3d().unwrap();
     let profiles = args.get_object(activation, 1, "profiles")?;
     let profiles = profiles.as_vector_storage().unwrap();
 
@@ -62,15 +60,13 @@ pub fn request_context3d_internal<'gc>(
         let context3d_obj = Context3DObject::from_context(activation, context, this_stage3d)?;
         this_stage3d.set_context3d(Some(context3d_obj), activation.gc());
 
-        let event = activation
-            .avm2()
-            .classes()
-            .event
-            .construct(activation, &["context3DCreate".into()])?;
+        let event = EventObject::bare_default_event(activation.context, "context3DCreate");
 
-        // FIXME - fire this at least one frame later,
-        // since some seems to expect this (e.g. the adobe triangle example)
-        this.call_public_property("dispatchEvent", &[event.into()], activation)?;
+        this.call_method(
+            event_dispatcher_methods::DISPATCH_EVENT,
+            &[event.into()],
+            activation,
+        )?;
     }
 
     Ok(Value::Undefined)

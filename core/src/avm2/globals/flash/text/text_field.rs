@@ -10,7 +10,8 @@ use crate::avm2::{ArrayObject, ArrayStorage, Error};
 use crate::display_object::{AutoSizeMode, EditText, TDisplayObject, TextSelection};
 use crate::html::TextFormat;
 use crate::string::AvmString;
-use crate::{avm2_stub_getter, avm2_stub_method, avm2_stub_setter};
+use crate::{avm2_stub_getter, avm2_stub_setter};
+use ruffle_macros::istr;
 use swf::{Color, Point};
 
 pub fn text_field_allocator<'gc>(
@@ -62,7 +63,7 @@ pub fn set_always_show_selection<'gc>(
 }
 
 pub fn get_auto_size<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
+    activation: &mut Activation<'_, 'gc>,
     this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -72,12 +73,14 @@ pub fn get_auto_size<'gc>(
         .as_display_object()
         .and_then(|this| this.as_edit_text())
     {
-        return Ok(match this.autosize() {
-            AutoSizeMode::None => "none".into(),
-            AutoSizeMode::Left => "left".into(),
-            AutoSizeMode::Center => "center".into(),
-            AutoSizeMode::Right => "right".into(),
-        });
+        let autosize = match this.autosize() {
+            AutoSizeMode::None => istr!("none"),
+            AutoSizeMode::Left => istr!("left"),
+            AutoSizeMode::Center => istr!("center"),
+            AutoSizeMode::Right => istr!("right"),
+        };
+
+        return Ok(autosize.into());
     }
 
     Ok(Value::Undefined)
@@ -656,7 +659,7 @@ pub fn get_text_width<'gc>(
 }
 
 pub fn get_type<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
+    activation: &mut Activation<'_, 'gc>,
     this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -666,10 +669,12 @@ pub fn get_type<'gc>(
         .as_display_object()
         .and_then(|this| this.as_edit_text())
     {
-        match this.is_editable() {
-            true => return Ok("input".into()),
-            false => return Ok("dynamic".into()),
-        }
+        let type_ = match this.is_editable() {
+            true => istr!("input"),
+            false => istr!("dynamic"),
+        };
+
+        return Ok(type_.into());
     }
 
     Ok(Value::Undefined)
@@ -1009,7 +1014,7 @@ pub fn set_text_format<'gc>(
 }
 
 pub fn get_anti_alias_type<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
+    activation: &mut Activation<'_, 'gc>,
     this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -1019,11 +1024,13 @@ pub fn get_anti_alias_type<'gc>(
         .as_display_object()
         .and_then(|this| this.as_edit_text())
     {
-        return if this.render_settings().is_advanced() {
-            Ok("advanced".into())
+        let anti_alias_type = if this.render_settings().is_advanced() {
+            istr!("advanced")
         } else {
-            Ok("normal".into())
+            istr!("normal")
         };
+
+        return Ok(anti_alias_type.into());
     }
 
     Ok(Value::Undefined)
@@ -1053,7 +1060,7 @@ pub fn set_anti_alias_type<'gc>(
 }
 
 pub fn get_grid_fit_type<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
+    activation: &mut Activation<'_, 'gc>,
     this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -1063,11 +1070,13 @@ pub fn get_grid_fit_type<'gc>(
         .as_display_object()
         .and_then(|this| this.as_edit_text())
     {
-        return match this.render_settings().grid_fit() {
-            swf::TextGridFit::None => Ok("none".into()),
-            swf::TextGridFit::Pixel => Ok("pixel".into()),
-            swf::TextGridFit::SubPixel => Ok("subpixel".into()),
+        let grid_fit_type = match this.render_settings().grid_fit() {
+            swf::TextGridFit::None => istr!("none"),
+            swf::TextGridFit::Pixel => istr!("pixel"),
+            swf::TextGridFit::SubPixel => istr!("subpixel"),
         };
+
+        return Ok(grid_fit_type.into());
     }
 
     Ok(Value::Undefined)
@@ -1245,19 +1254,17 @@ pub fn get_line_metrics<'gc>(
     };
 
     let metrics_class = activation.avm2().classes().textlinemetrics;
-    Ok(metrics_class
-        .construct(
-            activation,
-            &[
-                metrics.x.to_pixels().into(),
-                metrics.width.to_pixels().into(),
-                metrics.height.to_pixels().into(),
-                metrics.ascent.to_pixels().into(),
-                metrics.descent.to_pixels().into(),
-                metrics.leading.to_pixels().into(),
-            ],
-        )?
-        .into())
+    metrics_class.construct(
+        activation,
+        &[
+            metrics.x.to_pixels().into(),
+            metrics.width.to_pixels().into(),
+            metrics.height.to_pixels().into(),
+            metrics.ascent.to_pixels().into(),
+            metrics.descent.to_pixels().into(),
+            metrics.leading.to_pixels().into(),
+        ],
+    )
 }
 
 pub fn get_line_length<'gc>(
@@ -1654,19 +1661,6 @@ pub fn get_char_index_at_point<'gc>(
 ) -> Result<Value<'gc>, Error<'gc>> {
     let this = this.as_object().unwrap();
 
-    // TODO This currently uses screen_position_to_index, which is inaccurate, because:
-    //   1. getCharIndexAtPoint should return -1 when clicked outside of a character,
-    //   2. screen_position_to_index returns caret index, not clicked character index.
-    //   Currently, it is difficult to prove accuracy of this method, as at the time
-    //   of writing this comment, text layout behaves differently compared to Flash.
-    //   However, the current implementation is good enough to make some SWFs work.
-    avm2_stub_method!(
-        activation,
-        "flash.text.TextField",
-        "getCharIndexAtPoint",
-        "inaccurate char index detection"
-    );
-
     let Some(this) = this
         .as_display_object()
         .and_then(|this| this.as_edit_text())
@@ -1674,10 +1668,11 @@ pub fn get_char_index_at_point<'gc>(
         return Ok(Value::Undefined);
     };
 
-    let x = args.get_f64(activation, 0)?;
+    // No idea why FP does this weird 1px translation...
+    let x = args.get_f64(activation, 0)? + 1.0;
     let y = args.get_f64(activation, 1)?;
 
-    if let Some(index) = this.screen_position_to_index(Point::from_pixels(x, y)) {
+    if let Some(index) = this.char_index_at_point(Point::from_pixels(x, y)) {
         Ok(index.into())
     } else {
         Ok(Value::Number(-1f64))
@@ -1784,19 +1779,62 @@ pub fn get_char_boundaries<'gc>(
         return Ok(Value::Null);
     };
 
-    let rect = activation
-        .avm2()
-        .classes()
-        .rectangle
-        .construct(
-            activation,
-            &[
-                bounds.x_min.to_pixels().into(),
-                bounds.y_min.to_pixels().into(),
-                bounds.width().to_pixels().into(),
-                bounds.height().to_pixels().into(),
-            ],
-        )?
-        .into();
+    if bounds.width() == swf::Twips::ZERO {
+        return Ok(Value::Null);
+    }
+
+    let rect = activation.avm2().classes().rectangle.construct(
+        activation,
+        &[
+            bounds.x_min.to_pixels().into(),
+            bounds.y_min.to_pixels().into(),
+            bounds.width().to_pixels().into(),
+            bounds.height().to_pixels().into(),
+        ],
+    )?;
+
     Ok(rect)
+}
+
+pub fn get_style_sheet<'gc>(
+    _activation: &mut Activation<'_, 'gc>,
+    this: Value<'gc>,
+    _args: &[Value<'gc>],
+) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
+    let Some(this) = this
+        .as_display_object()
+        .and_then(|this| this.as_edit_text())
+    else {
+        return Ok(Value::Undefined);
+    };
+
+    Ok(match this.style_sheet() {
+        Some(style_sheet) => Value::Object(Object::StyleSheetObject(style_sheet)),
+        None => Value::Null,
+    })
+}
+
+pub fn set_style_sheet<'gc>(
+    activation: &mut Activation<'_, 'gc>,
+    this: Value<'gc>,
+    args: &[Value<'gc>],
+) -> Result<Value<'gc>, Error<'gc>> {
+    let this = this.as_object().unwrap();
+
+    let Some(this) = this
+        .as_display_object()
+        .and_then(|this| this.as_edit_text())
+    else {
+        return Ok(Value::Undefined);
+    };
+
+    let style_sheet = args
+        .try_get_object(activation, 0)
+        .and_then(|o| o.as_style_sheet());
+
+    this.set_style_sheet(activation.context, style_sheet);
+
+    Ok(Value::Undefined)
 }

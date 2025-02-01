@@ -1,12 +1,14 @@
 package flash.text.engine {
     import flash.events.EventDispatcher;
+
+    [API("662")]
     public class ContentElement {
         public static const GRAPHIC_ELEMENT:uint = 65007;
         public var userData;
 
         internal var _text:String = null;
 
-        [Ruffle(InternalSlot)]
+        [Ruffle(NativeAccessible)]
         private var _elementFormat:ElementFormat;
 
         public function ContentElement(elementFormat:ElementFormat = null, eventMirror:EventDispatcher = null, textRotation:String = "rotate0") {
@@ -14,6 +16,7 @@ package flash.text.engine {
             this._elementFormat = elementFormat;
         }
 
+        [Ruffle(NativeCallable)]
         public function get text():String {
             return this._text;
         }

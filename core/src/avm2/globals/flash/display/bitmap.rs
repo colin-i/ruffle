@@ -6,8 +6,8 @@ use crate::avm2::globals::flash::display::display_object::initialize_for_allocat
 use crate::avm2::object::{BitmapDataObject, ClassObject, Object, TObject};
 use crate::avm2::value::Value;
 use crate::avm2::Error;
+use ruffle_macros::istr;
 use ruffle_render::bitmap::PixelSnapping;
-use ruffle_wstr::WStr;
 
 use crate::avm2::error::make_error_2008;
 use crate::avm2::parameters::ParametersExt;
@@ -91,9 +91,19 @@ pub fn init<'gc>(
     let bitmap_data = args
         .try_get_object(activation, 0)
         .and_then(|o| o.as_bitmap_data());
-    let Some(pixel_snapping) = PixelSnapping::from_wstr(&args.get_string(activation, 1)?) else {
+
+    let pixel_snapping = args.get_string(activation, 1)?;
+
+    let pixel_snapping = if &pixel_snapping == b"always" {
+        PixelSnapping::Always
+    } else if &pixel_snapping == b"auto" {
+        PixelSnapping::Auto
+    } else if &pixel_snapping == b"never" {
+        PixelSnapping::Never
+    } else {
         return Err(make_error_2008(activation, "pixelSnapping"));
     };
+
     let smoothing = args.get_bool(2);
 
     if let Some(bitmap) = this.as_display_object().and_then(|dobj| dobj.as_bitmap()) {
@@ -156,15 +166,20 @@ pub fn set_bitmap_data<'gc>(
 
 /// Stub `Bitmap.pixelSnapping`'s getter
 pub fn get_pixel_snapping<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
+    activation: &mut Activation<'_, 'gc>,
     this: Value<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let this = this.as_object().unwrap();
 
     if let Some(bitmap) = this.as_display_object().and_then(|dobj| dobj.as_bitmap()) {
-        let value: &WStr = bitmap.pixel_snapping().into();
-        return Ok(Value::String(value.into()));
+        let pixel_snapping = match bitmap.pixel_snapping() {
+            PixelSnapping::Always => istr!("always"),
+            PixelSnapping::Auto => istr!("auto"),
+            PixelSnapping::Never => istr!("never"),
+        };
+
+        return Ok(pixel_snapping.into());
     }
     Ok(Value::Undefined)
 }
@@ -178,10 +193,19 @@ pub fn set_pixel_snapping<'gc>(
     let this = this.as_object().unwrap();
 
     if let Some(bitmap) = this.as_display_object().and_then(|dobj| dobj.as_bitmap()) {
-        let Some(value) = PixelSnapping::from_wstr(&args.get_string(activation, 0)?) else {
+        let value = args.get_string(activation, 0)?;
+
+        let pixel_snapping = if &value == b"always" {
+            PixelSnapping::Always
+        } else if &value == b"auto" {
+            PixelSnapping::Auto
+        } else if &value == b"never" {
+            PixelSnapping::Never
+        } else {
             return Err(make_error_2008(activation, "pixelSnapping"));
         };
-        bitmap.set_pixel_snapping(activation.gc(), value);
+
+        bitmap.set_pixel_snapping(activation.gc(), pixel_snapping);
     }
     Ok(Value::Undefined)
 }

@@ -11,6 +11,7 @@ use crate::display_object::{DisplayObject, TDisplayObject};
 use crate::string::{AvmString, SwfStrExt as _};
 use crate::tag_utils::SwfSlice;
 use gc_arena::{Collect, Gc, GcCell, Mutation};
+use ruffle_macros::istr;
 use std::{borrow::Cow, fmt, num::NonZeroU8};
 use swf::{avm1::types::FunctionFlags, SwfStr};
 
@@ -144,14 +145,21 @@ impl<'gc> Avm1Function<'gc> {
         self.register_count
     }
 
-    fn debug_string_for_call(&self, name: ExecutionName<'gc>, args: &[Value<'gc>]) -> String {
+    fn debug_string_for_call(
+        &self,
+        activation: &mut Activation<'_, 'gc>,
+        name: ExecutionName<'gc>,
+        args: &[Value<'gc>],
+    ) -> String {
         let mut result = match self.name.map(ExecutionName::Dynamic).unwrap_or(name) {
             ExecutionName::Static(n) => n.to_owned(),
             ExecutionName::Dynamic(n) => n.to_utf8_lossy().into_owned(),
         };
         result.push('(');
         for i in 0..args.len() {
-            result.push_str(args.get(i).unwrap().type_of());
+            let arg_type = args.get(i).unwrap().type_of(activation);
+            result.push_str(&arg_type.to_string());
+
             if i < args.len() - 1 {
                 result.push_str(", ");
             }
@@ -321,6 +329,18 @@ pub enum ExecutionName<'gc> {
     Dynamic(AvmString<'gc>),
 }
 
+impl From<&'static str> for ExecutionName<'_> {
+    fn from(string: &'static str) -> Self {
+        ExecutionName::Static(string)
+    }
+}
+
+impl<'gc> From<AvmString<'gc>> for ExecutionName<'gc> {
+    fn from(string: AvmString<'gc>) -> Self {
+        ExecutionName::Dynamic(string)
+    }
+}
+
 impl<'gc> Executable<'gc> {
     /// Execute the given code.
     ///
@@ -401,7 +421,7 @@ impl<'gc> Executable<'gc> {
         let arguments_caller = activation.callee;
 
         let name = if cfg!(feature = "avm_debug") {
-            Cow::Owned(af.debug_string_for_call(name, args))
+            Cow::Owned(af.debug_string_for_call(activation, name, args))
         } else {
             Cow::Borrowed("[Anonymous]")
         };
@@ -579,14 +599,14 @@ impl<'gc> TObject<'gc> for FunctionObject<'gc> {
 
     fn call(
         &self,
-        name: AvmString<'gc>,
+        name: impl Into<ExecutionName<'gc>>,
         activation: &mut Activation<'_, 'gc>,
         this: Value<'gc>,
         args: &[Value<'gc>],
     ) -> Result<Value<'gc>, Error<'gc>> {
         match self.as_executable() {
             Some(exec) => exec.exec(
-                ExecutionName::Dynamic(name),
+                name.into(),
                 activation,
                 this,
                 0,
@@ -606,14 +626,14 @@ impl<'gc> TObject<'gc> for FunctionObject<'gc> {
     ) -> Result<(), Error<'gc>> {
         this.define_value(
             activation.gc(),
-            "__constructor__",
+            istr!("__constructor__"),
             (*self).into(),
             Attribute::DONT_ENUM,
         );
         if activation.swf_version() < 7 {
             this.define_value(
                 activation.gc(),
-                "constructor",
+                istr!("constructor"),
                 (*self).into(),
                 Attribute::DONT_ENUM,
             );
@@ -649,20 +669,20 @@ impl<'gc> TObject<'gc> for FunctionObject<'gc> {
         args: &[Value<'gc>],
     ) -> Result<Value<'gc>, Error<'gc>> {
         let prototype = self
-            .get("prototype", activation)?
+            .get(istr!("prototype"), activation)?
             .coerce_to_object(activation);
         let this = prototype.create_bare_object(activation, prototype)?;
 
         this.define_value(
             activation.gc(),
-            "__constructor__",
+            istr!("__constructor__"),
             (*self).into(),
             Attribute::DONT_ENUM,
         );
         if activation.swf_version() < 7 {
             this.define_value(
                 activation.gc(),
-                "constructor",
+                istr!("constructor"),
                 (*self).into(),
                 Attribute::DONT_ENUM,
             );

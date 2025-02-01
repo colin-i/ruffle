@@ -3,12 +3,12 @@
 use crate::avm1::object::NativeObject;
 use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{Activation, ArrayObject, Error, Object, ScriptObject, TObject, Value};
-use crate::avm1_stub;
 use crate::display_object::{AutoSizeMode, EditText, TDisplayObject};
 use crate::ecma_conversions::round_to_even;
 use crate::html::TextFormat;
 use crate::string::{AvmString, StringContext, WStr};
 use gc_arena::Gc;
+use ruffle_macros::istr;
 
 macro_rules! getter {
     ($name:ident) => {
@@ -217,15 +217,15 @@ fn set_underline<'gc>(
     Ok(())
 }
 
-fn align<'gc>(_activation: &mut Activation<'_, 'gc>, text_format: &TextFormat) -> Value<'gc> {
+fn align<'gc>(activation: &mut Activation<'_, 'gc>, text_format: &TextFormat) -> Value<'gc> {
     text_format
         .align
         .as_ref()
         .map_or(Value::Null, |align| match align {
-            swf::TextAlign::Left => "left".into(),
-            swf::TextAlign::Center => "center".into(),
-            swf::TextAlign::Right => "right".into(),
-            swf::TextAlign::Justify => "justify".into(),
+            swf::TextAlign::Left => istr!("left").into(),
+            swf::TextAlign::Center => istr!("center").into(),
+            swf::TextAlign::Right => istr!("right").into(),
+            swf::TextAlign::Justify => istr!("justify").into(),
         })
 }
 
@@ -424,17 +424,36 @@ fn set_bullet<'gc>(
     Ok(())
 }
 
-fn display<'gc>(activation: &mut Activation<'_, 'gc>, _text_format: &TextFormat) -> Value<'gc> {
-    avm1_stub!(activation, "TextFormat", "display");
-    Value::Null
+fn display<'gc>(activation: &mut Activation<'_, 'gc>, text_format: &TextFormat) -> Value<'gc> {
+    text_format
+        .display
+        .as_ref()
+        .map_or(Value::Null, |align| match align {
+            crate::html::TextDisplay::Block => istr!("block").into(),
+            crate::html::TextDisplay::Inline => istr!("inline").into(),
+            crate::html::TextDisplay::None => istr!("none").into(),
+        })
 }
 
 fn set_display<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _text_format: &mut TextFormat,
-    _value: &Value<'gc>,
+    text_format: &mut TextFormat,
+    value: &Value<'gc>,
 ) -> Result<(), Error<'gc>> {
-    avm1_stub!(activation, "TextFormat", "display");
+    if matches!(value, Value::Undefined | Value::Null) {
+        text_format.display = Some(crate::html::TextDisplay::Block);
+        return Ok(());
+    }
+
+    let value = value.coerce_to_string(activation)?;
+    let display = if &value == b"inline" {
+        crate::html::TextDisplay::Inline
+    } else if &value == b"none" {
+        crate::html::TextDisplay::None
+    } else {
+        crate::html::TextDisplay::Block
+    };
+    text_format.display = Some(display);
     Ok(())
 }
 
@@ -516,28 +535,28 @@ fn get_text_extent<'gc>(
         .expect("All text boxes should have at least one line at all times");
 
     result.set_data(
-        "ascent".into(),
+        istr!("ascent"),
         metrics.ascent.to_pixels().into(),
         activation,
     )?;
     result.set_data(
-        "descent".into(),
+        istr!("descent"),
         metrics.descent.to_pixels().into(),
         activation,
     )?;
-    result.set_data("width".into(), metrics.width.to_pixels().into(), activation)?;
+    result.set_data(istr!("width"), metrics.width.to_pixels().into(), activation)?;
     result.set_data(
-        "height".into(),
+        istr!("height"),
         metrics.height.to_pixels().into(),
         activation,
     )?;
     result.set_data(
-        "textFieldHeight".into(),
+        istr!("textFieldHeight"),
         temp_edittext.height().into(),
         activation,
     )?;
     result.set_data(
-        "textFieldWidth".into(),
+        istr!("textFieldWidth"),
         temp_edittext.width().into(),
         activation,
     )?;
@@ -607,6 +626,7 @@ pub fn constructor<'gc>(
     text_format.right_margin = get_arg_as_i32(activation, args.get(10))?;
     text_format.indent = get_arg_as_i32(activation, args.get(11))?;
     text_format.leading = get_arg_as_i32(activation, args.get(12))?;
+    text_format.display = Some(crate::html::TextDisplay::Block);
     this.set_native(
         activation.gc(),
         NativeObject::TextFormat(Gc::new(activation.gc(), text_format.into())),

@@ -1,8 +1,9 @@
 //! `flash.media.Sound` builtin/prototype
 
 use crate::avm2::activation::Activation;
+use crate::avm2::globals::methods::flash_media_sound as sound_methods;
 use crate::avm2::globals::slots::flash_net_url_request as url_request_slots;
-use crate::avm2::object::{QueuedPlay, SoundChannelObject, TObject};
+use crate::avm2::object::{EventObject, QueuedPlay, SoundChannelObject, TObject};
 use crate::avm2::parameters::ParametersExt;
 use crate::avm2::value::Value;
 use crate::avm2::Avm2;
@@ -10,7 +11,6 @@ use crate::avm2::Error;
 use crate::backend::navigator::Request;
 use crate::character::Character;
 use crate::display_object::SoundTransform;
-use crate::string::AvmString;
 use crate::{avm2_stub_getter, avm2_stub_method};
 use swf::{SoundEvent, SoundInfo};
 
@@ -22,10 +22,8 @@ pub fn init<'gc>(
     this: Value<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    let this = this.as_object().unwrap();
-
-    if let Some(sound_object) = this.as_sound_object() {
-        let class_def = this.instance_class();
+    if let Some(sound_object) = this.as_object().and_then(|o| o.as_sound_object()) {
+        let class_def = this.instance_class(activation);
 
         if let Some((movie, symbol)) = activation
             .context
@@ -48,7 +46,7 @@ pub fn init<'gc>(
     }
 
     if args.try_get_object(activation, 0).is_some() {
-        this.call_public_property("load", args, activation)?;
+        this.call_method(sound_methods::LOAD, args, activation)?;
     }
 
     Ok(Value::Undefined)
@@ -286,21 +284,8 @@ pub fn load_compressed_data_from_byte_array<'gc>(
         Error::RustError(format!("Failed to register sound from bytearray: {e:?}").into())
     })?;
 
-    let progress_evt = activation
-        .avm2()
-        .classes()
-        .progressevent
-        .construct(
-            activation,
-            &[
-                "progress".into(),
-                false.into(),
-                false.into(),
-                bytes.len().into(),
-                bytes.len().into(),
-            ],
-        )
-        .map_err(|e| Error::AvmError(AvmString::new_utf8(activation.gc(), e.to_string()).into()))?;
+    let progress_evt =
+        EventObject::progress_event(activation, "progress", bytes.len(), bytes.len());
 
     Avm2::dispatch_event(activation.context, progress_evt, this);
 

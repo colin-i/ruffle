@@ -6,9 +6,10 @@ use crate::avm2::object::{ObjectPtr, TObject};
 use crate::avm2::value::Value;
 use crate::avm2::Error;
 use crate::avm2::Namespace;
-use crate::string::{AvmString, StringContext};
+use crate::string::AvmString;
 use core::fmt;
 use gc_arena::{Collect, Gc, GcWeak};
+use ruffle_macros::istr;
 
 /// An Object which represents a boxed namespace name.
 #[derive(Collect, Clone, Copy)]
@@ -106,10 +107,6 @@ impl<'gc> TObject<'gc> for NamespaceObject<'gc> {
         Gc::as_ptr(self.0) as *const ObjectPtr
     }
 
-    fn value_of(&self, context: &mut StringContext<'gc>) -> Result<Value<'gc>, Error<'gc>> {
-        Ok(self.0.namespace.as_uri(context).into())
-    }
-
     fn as_namespace(&self) -> Option<Namespace<'gc>> {
         Some(self.0.namespace)
     }
@@ -145,11 +142,11 @@ impl<'gc> TObject<'gc> for NamespaceObject<'gc> {
     fn get_enumerant_name(
         self,
         index: u32,
-        _activation: &mut Activation<'_, 'gc>,
+        activation: &mut Activation<'_, 'gc>,
     ) -> Result<Value<'gc>, Error<'gc>> {
         Ok(match index {
-            1 => "uri".into(),
-            2 => "prefix".into(),
+            1 => istr!("uri").into(),
+            2 => istr!("prefix").into(),
             _ => Value::Null,
         })
     }

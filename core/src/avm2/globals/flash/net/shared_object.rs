@@ -1,8 +1,8 @@
 //! `flash.net.SharedObject` builtin/prototype
 
 use crate::avm2::error::error;
-use crate::avm2::object::TObject;
-pub use crate::avm2::object::{shared_object_allocator, SharedObjectObject};
+pub use crate::avm2::object::shared_object_allocator;
+use crate::avm2::object::{ScriptObject, SharedObjectObject, TObject};
 use crate::avm2::{Activation, Error, Object, Value};
 use crate::{avm2_stub_getter, avm2_stub_method, avm2_stub_setter};
 use flash_lso::types::{AMFVersion, Lso};
@@ -25,7 +25,7 @@ fn new_lso<'gc>(
     Ok(Lso::new(
         elements,
         name.split('/')
-            .last()
+            .next_back()
             .map(|e| e.to_string())
             .unwrap_or_else(|| "<unknown>".to_string()),
         AMFVersion::AMF3,
@@ -159,11 +159,7 @@ pub fn get_local<'gc>(
         data
     } else {
         // No data; create a fresh data object.
-        activation
-            .avm2()
-            .classes()
-            .object
-            .construct(activation, &[])?
+        ScriptObject::new_object(activation)
     };
 
     let created_shared_object =

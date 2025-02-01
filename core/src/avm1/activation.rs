@@ -864,7 +864,7 @@ impl<'a, 'gc> Activation<'a, 'gc> {
 
         let result = if method_name.is_empty() {
             // Undefined/empty method name; call `this` as a function.
-            object.call("[Anonymous]".into(), self, Value::Undefined, &args)?
+            object.call("[Anonymous]", self, Value::Undefined, &args)?
         } else {
             // Call `this[method_name]`.
             object.call_method(method_name, &args, self, ExecutionReason::FunctionCall)?
@@ -2323,8 +2323,8 @@ impl<'a, 'gc> Activation<'a, 'gc> {
     }
 
     fn action_type_of(&mut self) -> Result<FrameControl<'gc>, Error<'gc>> {
-        let type_of = self.context.avm1.pop().type_of();
-        self.context.avm1.push(AvmString::from(type_of).into());
+        let type_of = self.context.avm1.pop().type_of(self);
+        self.context.avm1.push(type_of.into());
         Ok(FrameControl::Continue)
     }
 

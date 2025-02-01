@@ -27,7 +27,7 @@ fn draw_underline(
     width: Twips,
     color: swf::Color,
 ) {
-    if width < Twips::ONE {
+    if width < Twips::ONE_PX {
         return;
     }
 
@@ -719,7 +719,10 @@ impl<'a, 'gc> LayoutContext<'a, 'gc> {
         let default_font = match font_name.deref() {
             "Times New Roman" => DefaultFont::Serif,
             "Arial" => DefaultFont::Sans,
+            "Consolas" => DefaultFont::Typewriter,
+            "Courier" => DefaultFont::Typewriter,
             "Courier New" => DefaultFont::Typewriter,
+            "NSimSun" => DefaultFont::Typewriter,
             _ => {
                 if font_name.contains("Ming") || font_name.contains('明') {
                     DefaultFont::JapaneseMincho
@@ -854,6 +857,7 @@ impl<'a, 'gc> LayoutContext<'a, 'gc> {
         } else {
             Twips::from_pixels(span.left_margin + span.block_indent)
         }
+        .max(Twips::ZERO)
     }
 
     /// Calculate the left-align offset of a given line of text given the span
@@ -1389,11 +1393,11 @@ impl<'gc> LayoutBox<'gc> {
             LayoutContent::Text {
                 text_format: TextFormat { url: Some(url), .. },
                 ..
-            } => url.len() > 0,
+            } => !url.is_empty(),
             LayoutContent::Bullet {
                 text_format: TextFormat { url: Some(url), .. },
                 ..
-            } => url.len() > 0,
+            } => !url.is_empty(),
             _ => false,
         }
     }

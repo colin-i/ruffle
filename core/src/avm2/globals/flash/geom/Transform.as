@@ -7,11 +7,8 @@ package flash.geom {
     import __ruffle__.stub_setter;
 
     public class Transform {
-        [Ruffle(InternalSlot)]
+        [Ruffle(NativeAccessible)]
         private var displayObject:DisplayObject;
-
-        private var _matrix3D:Matrix3D = null;
-        private var _perspectiveProjection:PerspectiveProjection = null;
 
         function Transform(object:DisplayObject) {
             this.displayObject = object;
