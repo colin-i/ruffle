@@ -417,6 +417,9 @@ name = "bitflags"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f68f53c83ab957f72c32642f3868eec03eb974d1fb82e453128456482613d36"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "bitstream-io"
@@ -4184,6 +4187,7 @@ dependencies = [
  "url",
  "wasm-bindgen-futures",
  "weak-table",
+ "web-sys",
  "web-time",
 ]
 
@@ -4993,6 +4997,7 @@ dependencies = [
  "lzma-rs",
  "num-derive",
  "num-traits",
+ "serde",
  "simple_asn1",
 ]
 
