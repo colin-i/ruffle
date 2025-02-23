@@ -1,0 +1,33 @@
+on:
+ workflow_dispatch:
+  inputs:
+   commit:
+    description: "build artifact"
+
+jobs:
+ abuild:
+  runs-on: ubuntu-24.04-arm
+  steps:
+   - uses: actions/checkout@v4
+     with:
+      fetch-depth: 1000
+   - name: Install Rust toolchain
+     uses: dtolnay/rust-toolchain@stable
+     with:
+      toolchain: stable
+   - name: Run a multi-line script
+     run: |
+      if [ -n "${{ github.event.inputs.commit }}" ]; then
+       git reset --hard ${{ github.event.inputs.commit }}
+      fi
+      sudo apt update
+      sudo apt install -y gcc pkgconf libssl-dev libudev-dev libasound2-dev openjdk-8-jre-headless
+      cd desktop
+      cargo build --release
+      chmod +x ../target/release/ruffle_desktop
+      echo "filepath=./target/release/ruffle_desktop" >> $GITHUB_ENV
+   - name: artifact
+     uses: actions/upload-artifact@v4
+     with:
+      name: release
+      path: ${{ env.filepath }}
