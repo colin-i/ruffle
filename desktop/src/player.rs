@@ -5,6 +5,8 @@ use crate::backends::{
 use crate::cli::FilesystemAccessMode;
 use crate::cli::GameModePreference;
 use crate::custom_event::RuffleEvent;
+#[cfg(feature = "debugger")]
+use crate::debug::WebsocketDebugBackend;
 use crate::gui::{FilePicker, MovieView};
 use crate::preferences::GlobalPreferences;
 use crate::{CALLSTACK, RENDER_INFO, SWF_INFO};
@@ -130,6 +132,11 @@ impl ActivePlayer {
     ) -> Self {
         let player_id = PlayerId::new();
         let mut builder = PlayerBuilder::new();
+
+        #[cfg(feature = "debugger")]
+        {
+            builder = builder.with_debugger(WebsocketDebugBackend::new());
+        }
 
         match CpalAudioBackend::new(preferences.output_device_name().as_deref()) {
             Ok(audio) => {

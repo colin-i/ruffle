@@ -7,6 +7,6 @@ pub trait DebugProvider<'gc> {
     fn dispatch(
         &mut self,
         evt: TargetedMsg,
-        context: &mut UpdateContext<'_, 'gc>,
+        context: &mut UpdateContext<'gc>,
     ) -> Option<DebugMessageOut>;
 }

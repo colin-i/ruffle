@@ -1,5 +1,4 @@
 use crate::avm1::Activation;
-use crate::avm1::TObject;
 use crate::avm1::Value as Avm1Value;
 use crate::context::UpdateContext;
 use crate::debug::avm1_message::Avm1Msg;
@@ -53,7 +52,7 @@ impl Avm1Debugger {
     }
 
     /// Preprocess a given function call to update debugger state
-    pub fn preprocess_call<'gc>(&mut self, context: &mut UpdateContext<'_, 'gc>, name: String) {
+    pub fn preprocess_call<'gc>(&mut self, context: &mut UpdateContext<'gc>, name: String) {
         if self.pending_breakpoints.contains(&name) || name == "_debugbreak" {
             self.execution_state = Avm1ExecutionState::Paused;
 
@@ -171,7 +170,7 @@ pub fn handle_avm1_debug_events<'gc>(activation: &mut Activation<'_, 'gc>) {
                     if let Avm1Value::Object(o) = res {
                         let mut props = Vec::new();
 
-                        for child in o.get_keys(activation) {
+                        for child in o.get_keys(activation, false) {
                             props.push(child.to_utf8_lossy().to_string());
                         }
 
@@ -209,10 +208,9 @@ pub fn handle_avm1_debug_events<'gc>(activation: &mut Activation<'_, 'gc>) {
             Avm1Msg::GetRegisters => {
                 let mut regs = Vec::<DValue>::new();
 
-                if let Some(r) = &activation.local_registers() {
-                    let r = r.read();
+                if let Some(r) = activation.local_registers() {
                     for i in 0..r.len() {
-                        regs.push(DValue::from(*r.get(i).unwrap()));
+                        regs.push(DValue::from(r[i].get()));
                     }
                 }
 
@@ -228,7 +226,7 @@ pub fn handle_avm1_debug_events<'gc>(activation: &mut Activation<'_, 'gc>) {
                 let locals = scope.locals();
                 let mut props = Vec::new();
 
-                for child in locals.get_keys(activation) {
+                for child in locals.get_keys(activation, false) {
                     props.push(child.to_utf8_lossy().to_string());
                 }
                 activation
@@ -245,7 +243,7 @@ pub fn handle_avm1_debug_events<'gc>(activation: &mut Activation<'_, 'gc>) {
 
                 let mut props = Vec::new();
 
-                for child in root_object.get_keys(activation) {
+                for child in root_object.get_keys(activation, false) {
                     props.push(child.to_utf8_lossy().to_string());
                 }
                 activation

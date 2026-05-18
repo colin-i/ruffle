@@ -17,7 +17,7 @@ pub enum DValue {
 }
 
 impl DValue {
-    pub(crate) fn as_avm1<'gc>(&self, context: &mut UpdateContext<'_, 'gc>) -> Avm1Value<'gc> {
+    pub(crate) fn as_avm1<'gc>(&self, context: &mut UpdateContext<'gc>) -> Avm1Value<'gc> {
         match self {
             // Objects can only be sent for now, not recieved
             Self::Null | Self::Object { .. } => Avm1Value::Null,
@@ -49,6 +49,7 @@ impl<'gc> From<Avm1Value<'gc>> for DValue {
             Avm1Value::Object(o) => Self::Object {
                 kind: format!("{:?}", o),
             },
+            Avm1Value::MovieClip(_) => Self::Undefined,
         }
     }
 }

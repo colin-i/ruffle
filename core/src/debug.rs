@@ -20,7 +20,7 @@ use crate::display_object::TDisplayObjectContainer;
 use debug_provider::DebugProvider;
 
 /// Process pending player debug events
-pub fn handle_player_debug_events<'gc>(context: &mut UpdateContext<'_, 'gc>) {
+pub fn handle_player_debug_events<'gc>(context: &mut UpdateContext<'gc>) {
     while let Some(dbg_in) = context.debugger.get_debug_event_player() {
         match dbg_in {
             PlayerMsg::Pause => {
@@ -52,7 +52,7 @@ pub fn handle_player_debug_events<'gc>(context: &mut UpdateContext<'_, 'gc>) {
 
 /// Walk a path, returning the display object at that point in the depth-tree, if it exists
 fn walk_path<'gc>(
-    context: &mut UpdateContext<'_, 'gc>,
+    context: &mut UpdateContext<'gc>,
     path: &[&str],
 ) -> Option<DisplayObject<'gc>> {
     let mut root = context.stage.root_clip();
@@ -61,12 +61,12 @@ fn walk_path<'gc>(
     for depth in path.iter() {
         // If we have a container
         //TODO: this wont work with buttons for now
-        if let Some(cont) = root.as_container() {
+        if let Some(cont) = root?.as_container() {
             // Get the child at that depth
             if let Some(child) =
                 cont.child_by_name(ruffle_wstr::WStr::from_units(depth.as_bytes()), true)
             {
-                root = child;
+                root = Some(child);
             } else {
                 println!("no child");
                 // No child at that depth, exit
@@ -79,10 +79,10 @@ fn walk_path<'gc>(
         }
     }
 
-    Some(root)
+    Some(root?)
 }
 
-pub fn handle_targeted_debug_events<'gc>(context: &mut UpdateContext<'_, 'gc>) {
+pub fn handle_targeted_debug_events<'gc>(context: &mut UpdateContext<'gc>) {
     while let Some((path, msg)) = context.debugger.get_debug_event_targeted() {
         let d_o = if path == "/" {
             context.stage.root_clip()
@@ -90,10 +90,10 @@ pub fn handle_targeted_debug_events<'gc>(context: &mut UpdateContext<'_, 'gc>) {
             let dp = path.split('/').collect::<Vec<_>>();
             println!("path = {:?}", dp);
             let d_o = walk_path(context, &dp);
-            d_o.unwrap()
+            Some(d_o.unwrap())
         };
 
-        let evt = d_o.as_debuggable().unwrap().dispatch(msg, context);
+        let evt = d_o.unwrap().as_debuggable().unwrap().dispatch(msg, context);
         if let Some(evt) = evt {
             context.debugger.submit_debug_message(evt);
         }

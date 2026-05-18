@@ -2223,10 +2223,14 @@ impl<'gc> MovieClip<'gc> {
 
     fn enabled(self, context: &mut UpdateContext<'gc>) -> bool {
         if !self.movie().is_action_script_3() {
-            self.get_avm1_boolean_property(istr!(context, "enabled"), context, |_| true)
+            self.avm1_enabled(context)
         } else {
             self.avm2_enabled()
         }
+    }
+
+    pub fn avm1_enabled(self, context: &mut UpdateContext<'gc>) -> bool {
+        self.get_avm1_boolean_property(istr!(context, "enabled"), context, |_| true)
     }
 
     pub fn avm2_enabled(self) -> bool {

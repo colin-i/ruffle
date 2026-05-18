@@ -1,4 +1,3 @@
-use crate::avm1::TObject;
 use crate::avm1::{Activation, ActivationIdentifier};
 use crate::context::UpdateContext;
 use crate::debug::debug_message_out::DebugMessageOut;
@@ -6,7 +5,11 @@ use crate::debug::debug_provider::DebugProvider;
 use crate::debug::display_object_info::DisplayObjectInfo;
 use crate::debug::targeted_message::TargetedMsg;
 use crate::display_object::TDisplayObjectContainer;
-use crate::display_object::{MovieClip, TDisplayObject};
+use crate::display_object::MovieClip;
+use crate::display_object::{
+    TDisplayObject,
+    TInteractiveObject,
+};
 use crate::string::AvmString;
 use serde::{Deserialize, Serialize};
 
@@ -32,7 +35,7 @@ impl<'gc> DebugProvider<'gc> for MovieClipDebugger<'gc> {
     fn dispatch(
         &mut self,
         evt: TargetedMsg,
-        context: &mut UpdateContext<'_, 'gc>,
+        context: &mut UpdateContext<'gc>,
     ) -> Option<DebugMessageOut> {
         match evt {
             TargetedMsg::Stop => {
@@ -43,8 +46,8 @@ impl<'gc> DebugProvider<'gc> for MovieClipDebugger<'gc> {
                 DisplayObjectInfo::MovieClip(MovieClipInfo {
                     depth: self.tgt.depth(),
                     current_frame: self.tgt.current_frame(),
-                    is_focusable: self.tgt.is_focusable(),
-                    enabled: self.tgt.enabled(),
+                    is_focusable: self.tgt.is_focusable(context),
+                    enabled: self.tgt.avm1_enabled(context),
                 }),
             )),
             TargetedMsg::GetChildren => {
@@ -55,12 +58,12 @@ impl<'gc> DebugProvider<'gc> for MovieClipDebugger<'gc> {
             }
             TargetedMsg::GetProps => {
                 let mut activation = Activation::from_stub(
-                    context.reborrow(),
+                    context,
                     ActivationIdentifier::root("[Debugger]"),
                 );
 
-                let obj = self.tgt.object().coerce_to_object(&mut activation);
-                let keys = obj.get_keys(&mut activation);
+                let obj = self.tgt.object1().unwrap();
+                let keys = obj.get_keys(&mut activation, false);
 
                 let mut out_keys: Vec<String> = Vec::new();
                 for key in &keys {
@@ -71,11 +74,11 @@ impl<'gc> DebugProvider<'gc> for MovieClipDebugger<'gc> {
             }
             TargetedMsg::GetPropValue { name } => {
                 let mut activation = Activation::from_stub(
-                    context.reborrow(),
+                    context,
                     ActivationIdentifier::root("[Debugger]"),
                 );
 
-                let obj = self.tgt.object().coerce_to_object(&mut activation);
+                let obj = self.tgt.object1().unwrap();
                 let val = obj.get(
                     AvmString::new_utf8(activation.context.gc_context, name),
                     &mut activation,
@@ -86,11 +89,11 @@ impl<'gc> DebugProvider<'gc> for MovieClipDebugger<'gc> {
             }
             TargetedMsg::SetPropValue { name, value } => {
                 let mut activation = Activation::from_stub(
-                    context.reborrow(),
+                    context,
                     ActivationIdentifier::root("[Debugger]"),
                 );
 
-                let obj = self.tgt.object().coerce_to_object(&mut activation);
+                let obj = self.tgt.object1().unwrap();
                 obj.set(
                     AvmString::new_utf8(activation.context.gc_context, name),
                     value.as_avm1(&mut activation.context),

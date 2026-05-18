@@ -12,7 +12,7 @@ impl<'gc> DebugProvider<'gc> for Debuggable<'gc> {
     fn dispatch(
         &mut self,
         evt: TargetedMsg,
-        context: &mut UpdateContext<'_, 'gc>,
+        context: &mut UpdateContext<'gc>,
     ) -> Option<DebugMessageOut> {
         match self {
             Self::MovieClip(x) => x.dispatch(evt, context),
